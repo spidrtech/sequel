@@ -347,14 +347,8 @@ module Sequel
           false
         end
 
-        private
-
-        def cti_this(model)
-          use_server(model.cti_instance_dataset.where(model.primary_key_hash(pk)))
-        end
-
         # Set the sti_key column based on the sti_key_map.
-        def _before_validation
+        def before_validation
           if new? && (set = self[model.sti_key])
             exp = model.sti_key_chooser.call(self)
             if set != exp
@@ -364,6 +358,12 @@ module Sequel
             end
           end
           super
+        end
+
+        private
+
+        def cti_this(model)
+          use_server(model.cti_instance_dataset.where(model.primary_key_hash(pk)))
         end
 
         # Insert rows into all backing tables, using the columns
