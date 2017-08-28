@@ -94,7 +94,7 @@ module Sequel
     #
     #   a = Executive.first
     #   a.values # {:id=>1, name=>'S', :kind=>'Executive', :num_staff=>4, :num_managers=>2}
-    #   
+    #
     # Note that when loading from a subclass, because the subclass dataset uses a JOIN,
     # if you are referencing the primary key column, you need to disambiguate the reference
     # by explicitly qualifying it:
@@ -298,16 +298,12 @@ module Sequel
           return unless table
 
           pk = primary_key
+          parent_columns = self.columns
           subclass.instance_eval do
             if cti_tables.length == 1
               ds = ds.select(*self.columns.map{|cc| Sequel.qualify(cti_table_name, Sequel.identifier(cc))})
             end
-            cols = columns - [pk]
-            dup_cols = cols & ds.columns
-            unless dup_cols.empty?
-              # raise Error, "class_table_inheritance with duplicate column names (other than the primary key column) is not supported, make sure tables have unique column names"
-              Sequel::Deprecation.deprecate("Using class_table_inheritance with duplicate column names (#{n} => #{dup_cols}) in subclass tables (other than the primary key column)', 'Make sure all tables used have unique column names, or implement support for handling duplicate column names in the class_table_inheritance plugin")
-            end
+            cols = columns - parent_columns
             sel_app = cols.map{|cc| Sequel.qualify(table, Sequel.identifier(cc))}
             @sti_dataset = ds = ds.join(table, pk=>pk).select_append(*sel_app)
 
