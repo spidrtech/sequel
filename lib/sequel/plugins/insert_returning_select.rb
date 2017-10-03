@@ -21,7 +21,7 @@ module Sequel
       # Modify the current model's dataset selection, if the model
       # has a dataset.
       def self.configure(model)
-        model.instance_eval do
+        model.instance_exec do
           self.dataset = dataset if @dataset && @dataset.opts[:select]
         end
       end
@@ -29,14 +29,6 @@ module Sequel
       module ClassMethods
         # The dataset to use to insert new rows.  For internal use only.
         attr_reader :instance_insert_dataset
-
-        # Freeze instance insert dataset when freezing model class.
-        def freeze
-          super
-
-          @instance_insert_dataset.freeze if @instance_insert_dataset
-          self
-        end
 
         private
 

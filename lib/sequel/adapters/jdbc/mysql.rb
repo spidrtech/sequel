@@ -1,7 +1,7 @@
 # frozen-string-literal: true
 
 Sequel::JDBC.load_driver('com.mysql.jdbc.Driver', :MySQL)
-Sequel.require 'adapters/shared/mysql'
+require_relative '../shared/mysql'
 
 module Sequel
   module JDBC
@@ -13,25 +13,11 @@ module Sequel
       end
     end
 
-    # Database and Dataset instance methods for MySQL specific
-    # support via JDBC.
     module MySQL
-      # Database instance methods for MySQL databases accessed via JDBC.
       module DatabaseMethods
         include Sequel::MySQL::DatabaseMethods
-        LAST_INSERT_ID = 'SELECT LAST_INSERT_ID()'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :LAST_INSERT_ID)
         
         private
-        
-        # The database name for the given database.  Need to parse it out
-        # of the connection string, since the JDBC does no parsing on the
-        # given connection string by default.
-        def database_name
-          Sequel::Deprecation.deprecate("Database#database_name", "Instead, use .get(Sequel.function(:DATABASE))")
-          u = URI.parse(uri.sub(/\Ajdbc:/, ''))
-          (m = /\/(.*)/.match(u.path)) && m[1]
-        end
         
         # MySQL exception handling with SQLState is less accurate than with regexps.
         def database_exception_use_sqlstates?

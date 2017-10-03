@@ -1,39 +1,19 @@
 # frozen-string-literal: true
 
-Sequel.require %w'emulate_offset_with_row_number split_alter_table', 'adapters/utils'
+require_relative '../utils/emulate_offset_with_row_number'
+require_relative '../utils/split_alter_table'
 
 module Sequel
   module MSSQL
     Sequel::Database.set_shared_adapter_scheme(:mssql, self)
 
     def self.mock_adapter_setup(db)
-      db.instance_eval do
+      db.instance_exec do
         @server_version = 11000000
       end
     end
 
     module DatabaseMethods
-      AUTO_INCREMENT = 'IDENTITY(1,1)'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :AUTO_INCREMENT)
-      SERVER_VERSION_RE = /^(\d+)\.(\d+)\.(\d+)/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SERVER_VERSION_RE)
-      SERVER_VERSION_SQL = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS varchar)".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SERVER_VERSION_SQL)
-      SQL_BEGIN = "BEGIN TRANSACTION".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_BEGIN)
-      SQL_COMMIT = "COMMIT TRANSACTION".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_COMMIT)
-      SQL_ROLLBACK = "IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_ROLLBACK)
-      SQL_ROLLBACK_TO_SAVEPOINT = 'IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION autopoint_%d'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_ROLLBACK_TO_SAVEPOINT)
-      SQL_SAVEPOINT = 'SAVE TRANSACTION autopoint_%d'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_SAVEPOINT)
-      MSSQL_DEFAULT_RE = /\A(?:\(N?('.*')\)|\(\((-?\d+(?:\.\d+)?)\)\))\z/
-      Sequel::Deprecation.deprecate_constant(self, :MSSQL_DEFAULT_RE)
-      DECIMAL_TYPE_RE = /number|numeric|decimal/io
-      Sequel::Deprecation.deprecate_constant(self, :DECIMAL_TYPE_RE)
-
       FOREIGN_KEY_ACTION_MAP = {0 => :no_action, 1 => :cascade, 2 => :set_null, 3 => :set_default}.freeze
 
       include Sequel::Database::SplitAlterTable
@@ -42,12 +22,7 @@ module Sequel
       # strings.  True by default for compatibility, can be set to false for a possible
       # performance increase.  This sets the default for all datasets created from this
       # Database object.
-      attr_reader :mssql_unicode_strings
-
-      def mssql_unicode_strings=(v)
-        @mssql_unicode_strings = v
-        reset_default_dataset
-      end
+      attr_accessor :mssql_unicode_strings
 
       # Execute the given stored procedure with the given name.
       #
@@ -67,11 +42,11 @@ module Sequel
       #
       # Examples:
       #
-      #     DB.call_mssql_sproc(:SequelTest, {:args => ['input arg', :output]})
-      #     DB.call_mssql_sproc(:SequelTest, {:args => ['input arg', [:output, 'int', 'varname']]})
+      #     DB.call_mssql_sproc(:SequelTest, {args: ['input arg', :output]})
+      #     DB.call_mssql_sproc(:SequelTest, {args: ['input arg', [:output, 'int', 'varname']]})
       #
       #     named params:
-      #     DB.call_mssql_sproc(:SequelTest, :args => {
+      #     DB.call_mssql_sproc(:SequelTest, args: {
       #       'input_arg1_name' => 'input arg1 value',
       #       'input_arg2_name' => 'input arg2 value',
       #       'output_arg_name' => [:output, 'int', 'varname']
@@ -90,7 +65,7 @@ module Sequel
           method = :each_with_index
         end
 
-        args.send(method) do |v, i|
+        args.public_send(method) do |v, i|
           if named_args
             k = v
             v, type, select = i
@@ -128,7 +103,6 @@ module Sequel
         ds.first
       end
 
-      # Microsoft SQL Server uses the :mssql type.
       def database_type
         :mssql
       end
@@ -234,7 +208,7 @@ module Sequel
         dataset.send(:is_2008_or_later?)
       end
 
-      # MSSQL supports savepoints, though it doesn't support committing/releasing them savepoint
+      # MSSQL supports savepoints, though it doesn't support releasing them
       def supports_savepoints?
         true
       end
@@ -276,7 +250,6 @@ module Sequel
         'IDENTITY(1,1)'
       end
       
-      # MSSQL specific syntax for altering tables.
       def alter_table_sql(table, op)
         case op[:op]
         when :add_column
@@ -316,12 +289,10 @@ module Sequel
         end
       end
       
-      # SQL to start a new savepoint
       def begin_savepoint_sql(depth)
         "SAVE TRANSACTION autopoint_#{depth}"
       end
 
-      # SQL to BEGIN a transaction.
       def begin_transaction_sql
         "BEGIN TRANSACTION"
       end
@@ -339,13 +310,11 @@ module Sequel
         super(default, type)
       end
 
-      # Commit the active transaction on the connection, does not commit/release
-      # savepoints.
+      # Commit the active transaction on the connection, does not release savepoints.
       def commit_transaction(conn, opts=OPTS)
         log_connection_execute(conn, commit_transaction_sql) unless savepoint_level(conn) > 1
       end
 
-      # SQL to COMMIT a transaction.
       def commit_transaction_sql
         "COMMIT TRANSACTION"
       end
@@ -389,12 +358,10 @@ module Sequel
         end
       end
 
-      # The SQL to drop an index for the table.
       def drop_index_sql(table, op)
         "DROP INDEX #{quote_identifier(op[:name] || default_index_name(table, op[:columns]))} ON #{quote_schema_table(table)}"
       end
       
-      # support for clustered index type
       def index_definition_sql(table_name, index)
         index_name = index[:name] || default_index_name(table_name, index[:columns])
         raise Error, "Partial indexes are not supported for this database" if index[:where] && !supports_partial_indexes?
@@ -424,17 +391,14 @@ module Sequel
         "sp_rename #{literal(quote_schema_table(name))}, #{quote_identifier(schema_and_table(new_name).pop)}"
       end
       
-      # SQL to rollback to a savepoint
       def rollback_savepoint_sql(depth)
         "IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION autopoint_#{depth}"
       end
       
-      # SQL to ROLLBACK a transaction.
       def rollback_transaction_sql
         "IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION"
       end
       
-      # The closest MSSQL equivalent of a boolean datatype is the bit type.
       def schema_column_type(db_type)
         case db_type
         when /\A(?:bit)\z/io
@@ -537,110 +501,14 @@ module Sequel
       end)
       include EmulateOffsetWithRowNumber
 
-      CONSTANT_MAP = {:CURRENT_DATE=>'CAST(CURRENT_TIMESTAMP AS DATE)'.freeze, :CURRENT_TIME=>'CAST(CURRENT_TIMESTAMP AS TIME)'.freeze}#.freeze # SEQUEL5
-      EXTRACT_MAP = {:year=>"yy", :month=>"m", :day=>"d", :hour=>"hh", :minute=>"n", :second=>"s"}#.freeze # SEQUEL5
-      #EXTRACT_MAP.each_value(&:freeze) # SEQUEL5
+      CONSTANT_MAP = {:CURRENT_DATE=>'CAST(CURRENT_TIMESTAMP AS DATE)'.freeze, :CURRENT_TIME=>'CAST(CURRENT_TIMESTAMP AS TIME)'.freeze}.freeze
+      EXTRACT_MAP = {:year=>"yy", :month=>"m", :day=>"d", :hour=>"hh", :minute=>"n", :second=>"s"}.freeze
+      EXTRACT_MAP.each_value(&:freeze)
       LIMIT_ALL = Object.new.freeze
 
-      BOOL_TRUE = '1'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-      BOOL_FALSE = '0'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-      COMMA_SEPARATOR = ', '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA_SEPARATOR)
-      TABLE_HINT = " WITH (".freeze
-      Sequel::Deprecation.deprecate_constant(self, :TABLE_HINT)
-      READPAST = "READPAST".freeze
-      Sequel::Deprecation.deprecate_constant(self, :READPAST)
-      NOLOCK = 'NOLOCK'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :NOLOCK)
-      UPDLOCK = 'UPDLOCK'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :UPDLOCK)
-      WILDCARD = LiteralString.new('*').freeze
-      Sequel::Deprecation.deprecate_constant(self, :WILDCARD)
-      BRACKET_CLOSE =  ']'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BRACKET_CLOSE)
-      BRACKET_OPEN = '['.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BRACKET_OPEN)
-      COMMA = ', '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA)
-      PAREN_CLOSE = ')'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PAREN_CLOSE)
-      PAREN_SPACE_OPEN = ' ('.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PAREN_SPACE_OPEN)
-      SPACE = ' '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SPACE)
-      FROM = ' FROM '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :FROM)
-      APOS = "'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS)
-      APOS_RE = /'/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS_RE)
-      DOUBLE_APOS = "''".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_APOS)
-      INTO = " INTO ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :INTO)
-      DOUBLE_BRACKET_CLOSE = ']]'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_BRACKET_CLOSE)
-      DATEPART_SECOND_OPEN = "CAST((datepart(".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATEPART_SECOND_OPEN)
-      DATEPART_SECOND_MIDDLE = ') + datepart(ns, '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATEPART_SECOND_MIDDLE)
-      DATEPART_SECOND_CLOSE = ")/1000000000.0) AS double precision)".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATEPART_SECOND_CLOSE)
-      DATEPART_OPEN = "datepart(".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATEPART_OPEN)
-      OUTPUT_INSERTED = " OUTPUT INSERTED.*".freeze
-      Sequel::Deprecation.deprecate_constant(self, :OUTPUT_INSERTED)
-      HEX_START = '0x'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :HEX_START)
-      UNICODE_STRING_START = "N'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :UNICODE_STRING_START)
-      BACKSLASH_CRLF_RE = /\\((?:\r\n)|\n)/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKSLASH_CRLF_RE)
-      BACKSLASH_CRLF_REPLACE = '\\\\\\\\\\1\\1'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKSLASH_CRLF_REPLACE)
-      TOP_PAREN = " TOP (".freeze
-      Sequel::Deprecation.deprecate_constant(self, :TOP_PAREN)
-      TOP = " TOP ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :TOP)
-      OUTPUT = " OUTPUT ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :OUTPUT)
-      HSTAR = "H*".freeze
-      Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-      CASE_SENSITIVE_COLLATION = 'Latin1_General_CS_AS'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CASE_SENSITIVE_COLLATION)
-      CASE_INSENSITIVE_COLLATION = 'Latin1_General_CI_AS'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CASE_INSENSITIVE_COLLATION)
-      DEFAULT_TIMESTAMP_FORMAT = "'%Y-%m-%dT%H:%M:%S%N%z'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DEFAULT_TIMESTAMP_FORMAT)
-      FORMAT_DATE = "'%Y%m%d'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :FORMAT_DATE)
-      CROSS_APPLY = 'CROSS APPLY'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CROSS_APPLY)
-      OUTER_APPLY = 'OUTER APPLY'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :OUTER_APPLY)
-      OFFSET = " OFFSET ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :OFFSET)
-      ROWS = " ROWS".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ROWS)
-      ROWS_ONLY = " ROWS ONLY".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ROWS_ONLY)
-      FETCH_NEXT = " FETCH NEXT ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :FETCH_NEXT)
-      NON_SQL_OPTIONS = (Dataset::NON_SQL_OPTIONS + [:disable_insert_output, :mssql_unicode_strings]).freeze
-      Sequel::Deprecation.deprecate_constant(self, :NON_SQL_OPTIONS)
-
-      Dataset.def_mutation_method(:disable_insert_output, :output, :module=>self)
       Dataset.def_sql_method(self, :delete, %w'with delete limit from output from2 where')
       Dataset.def_sql_method(self, :insert, %w'with insert into columns output values')
       Dataset.def_sql_method(self, :update, [['if is_2005_or_later?', %w'with update limit table set output from where'], ['else', %w'update table set output from where']])
-
-      # Allow overriding of the mssql_unicode_strings option at the dataset level.
-      def mssql_unicode_strings=(v)
-        Sequel::Deprecation.deprecate("Dataset#mssql_unicode_strings=", "Switch to using with_mssql_unicode_strings, which returns a modified copy")
-        @opts[:mssql_unicode_strings] = v
-      end
 
       # Use the database's mssql_unicode_strings setting if the dataset hasn't overridden it.
       def mssql_unicode_strings
@@ -652,7 +520,6 @@ module Sequel
         clone(:mssql_unicode_strings=>v)
       end
 
-      # MSSQL uses + for string concatenation, and LIKE is case insensitive by default.
       def complex_expression_sql_append(sql, op, args)
         case op
         when :'||'
@@ -751,8 +618,8 @@ module Sequel
       #
       # Examples:
       #
-      #   dataset.output(:output_table, [:deleted__id, :deleted__name])
-      #   dataset.output(:output_table, :id => :inserted__id, :name => :inserted__name)
+      #   dataset.output(:output_table, [Sequel[:deleted][:id], Sequel[:deleted][:name]])
+      #   dataset.output(:output_table, id: Sequel[:inserted][:id], name: Sequel[:inserted][:name])
       def output(into, values)
         raise(Error, "SQL Server versions 2000 and earlier do not support the OUTPUT clause") unless supports_output_clause?
         output = {}
@@ -897,7 +764,7 @@ module Sequel
         end
       end
 
-      # MSSQL does not allow ordering in sub-clauses unless 'top' (limit) is specified
+      # MSSQL does not allow ordering in sub-clauses unless TOP (limit) is specified
       def aggregate_dataset
         (options_overlap(Sequel::Dataset::COUNT_FROM_SELF_OPTS) && !options_overlap([:limit])) ? unordered.from_self : super
       end
@@ -924,9 +791,7 @@ module Sequel
       # Allow update and delete for unordered, limited datasets only.
       def check_not_limited!(type)
         return if @opts[:skip_limit_check] && type != :truncate
-        #SEQUEL5
-        #raise Sequel::InvalidOperation, "Dataset##{type} not suppored on ordered, limited datasets" if opts[:order] && opts[:limit]
-        Sequel::Deprecation.deprecate("Dataset##{type} on ordered, limited datasets", "Call unlimited to not use a limit, or unordered to not use an order, or skip_limit_check to ignore the limit") if @opts[:order] && @opts[:limit]
+        raise Sequel::InvalidOperation, "Dataset##{type} not suppored on ordered, limited datasets" if opts[:order] && opts[:limit]
         super if type == :truncate || @opts[:offset]
       end
 
@@ -988,7 +853,7 @@ module Sequel
         end
       end
       
-      # Microsoft SQL Server 2012 has native support for offsets, but only for ordered datasets.
+      # Microsoft SQL Server 2012+ has native support for offsets, but only for ordered datasets.
       def emulate_offset_with_row_number?
         super && !(is_2012_or_later? && @opts[:order])
       end
@@ -1021,7 +886,7 @@ module Sequel
         sql << '0x' << v.unpack("H*").first
       end
       
-      # Use YYYYmmdd format, since that's the only want that is
+      # Use YYYYmmdd format, since that's the only format that is
       # multilanguage and not DATEFORMAT dependent.
       def literal_date(v)
         v.strftime("'%Y%m%d'")
@@ -1061,7 +926,7 @@ module Sequel
         end
       end
 
-      # MSSQL uses TOP N for limit.  For MSSQL 2005+ TOP (N) is used
+      # MSSQL 2000 uses TOP N for limit.  For MSSQL 2005+ TOP (N) is used
       # to allow the limit to be a bound variable.
       def select_limit_sql(sql)
         if l = @opts[:limit]
@@ -1092,7 +957,7 @@ module Sequel
       end
       alias delete_limit_sql update_limit_sql
 
-      # Support different types of locking styles
+      # Handle dirty, skip locked, and for update locking
       def select_lock_sql(sql)
         lock = @opts[:lock]
         skip_locked = @opts[:skip_locked]
@@ -1144,7 +1009,6 @@ module Sequel
         end
       end
 
-      # SQL fragment for MSSQL's OUTPUT clause.
       def output_sql(sql, type)
         return unless supports_output_clause?
         if output = @opts[:output]

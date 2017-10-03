@@ -1,29 +1,14 @@
-require 'rubygems'
-
 if ENV['COVERAGE']
-  require File.join(File.dirname(File.expand_path(__FILE__)), "sequel_coverage")
+  require_relative "sequel_coverage"
   SimpleCov.sequel_coverage(:filter=>%r{lib/sequel/extensions/core_extensions\.rb\z})
 end
 
-unless Object.const_defined?('Sequel') && Sequel.const_defined?('Model')
-  $:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../lib/"))
-  require 'sequel'
-end
-
-# SEQUEL5: Remove
-output = Sequel::Deprecation.output
-Sequel::Deprecation.output = nil
-Sequel.quote_identifiers = false
-Sequel.identifier_input_method = nil
-Sequel.identifier_output_method = nil
-Sequel::Deprecation.output = output
+$:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../lib/"))
+require_relative '../lib/sequel'
 
 Regexp.send(:include, Sequel::SQL::StringMethods)
 String.send(:include, Sequel::SQL::StringMethods)
 Sequel.extension :core_extensions
-if RUBY_VERSION < '1.9.0'
-  Sequel.extension :ruby18_symbol_extensions
-end
 Sequel.extension :symbol_aref
 Sequel.extension :virtual_row_method_block
 
@@ -31,7 +16,7 @@ gem 'minitest'
 require 'minitest/autorun'
 require 'minitest/hooks/default'
 
-require File.expand_path("#{File.dirname(__FILE__)}/deprecation_helper.rb")
+require_relative "deprecation_helper.rb"
 
 describe "Sequel core extensions" do
   it "should have Sequel.core_extensions? be true if enabled" do
@@ -53,45 +38,6 @@ describe "Core extensions" do
     end
   end
   
-  if RUBY_VERSION < '1.9.0'
-    it "should not allow inequality operations on true, false, or nil" do
-      @d.lit(:x > 1).must_equal "(x > 1)"
-      @d.lit(:x < true).must_equal "(x < 't')"
-      @d.lit(:x >= false).must_equal "(x >= 'f')"
-      @d.lit(:x <= nil).must_equal "(x <= NULL)"
-    end
-
-    it "should not allow inequality operations on boolean complex expressions" do
-      @d.lit(:x > (:y > 5)).must_equal "(x > (y > 5))"
-      @d.lit(:x < (:y < 5)).must_equal "(x < (y < 5))"
-      @d.lit(:x >= (:y >= 5)).must_equal "(x >= (y >= 5))"
-      @d.lit(:x <= (:y <= 5)).must_equal "(x <= (y <= 5))"
-      @d.lit(:x > {:y => nil}).must_equal "(x > (y IS NULL))"
-      @d.lit(:x < ~{:y => nil}).must_equal "(x < (y IS NOT NULL))"
-      @d.lit(:x >= {:y => 5}).must_equal "(x >= (y = 5))"
-      @d.lit(:x <= ~{:y => 5}).must_equal "(x <= (y != 5))"
-      @d.lit(:x >= {:y => [1,2,3]}).must_equal "(x >= (y IN (1, 2, 3)))"
-      @d.lit(:x <= ~{:y => [1,2,3]}).must_equal "(x <= (y NOT IN (1, 2, 3)))"
-    end
-    
-    it "should support >, <, >=, and <= via Symbol#>,<,>=,<=" do
-      @d.l(:x > 100).must_equal '(x > 100)'
-      @d.l(:x < 100.01).must_equal '(x < 100.01)'
-      @d.l(:x >= 100000000000000000000000000000000000).must_equal '(x >= 100000000000000000000000000000000000)'
-      @d.l(:x <= 100).must_equal '(x <= 100)'
-    end
-    
-    it "should support negation of >, <, >=, and <= via Symbol#~" do
-      @d.l(~(:x > 100)).must_equal '(x <= 100)'
-      @d.l(~(:x < 100.01)).must_equal '(x >= 100.01)'
-      @d.l(~(:x >= 100000000000000000000000000000000000)).must_equal '(x < 100000000000000000000000000000000000)'
-      @d.l(~(:x <= 100)).must_equal '(x > 100)'
-    end
-    
-    it "should support double negation via ~" do
-      @d.l(~~(:x > 100)).must_equal '(x > 100)'
-    end
-  end
   it "should support NOT via Symbol#~" do
     @d.l(~:x).must_equal 'NOT x'
   end
@@ -284,8 +230,7 @@ describe "Array#case and Hash#case" do
   it "should return SQL CASE expression" do
     @d.literal({:x=>:y}.case(:z)).must_equal '(CASE WHEN x THEN y ELSE z END)'
     @d.literal({:x=>:y}.case(:z, :exp)).must_equal '(CASE exp WHEN x THEN y ELSE z END)'
-    ['(CASE WHEN x THEN y WHEN a THEN b ELSE z END)',
-     '(CASE WHEN a THEN b WHEN x THEN y ELSE z END)'].must_include(@d.literal({:x=>:y, :a=>:b}.case(:z)))
+    @d.literal({:x=>:y, :a=>:b}.case(:z)).must_equal '(CASE WHEN x THEN y WHEN a THEN b ELSE z END)'
     @d.literal([[:x, :y]].case(:z)).must_equal '(CASE WHEN x THEN y ELSE z END)'
     @d.literal([[:x, :y], [:a, :b]].case(:z)).must_equal '(CASE WHEN x THEN y WHEN a THEN b ELSE z END)'
     @d.literal([[:x, :y], [:a, :b]].case(:z, :exp)).must_equal '(CASE exp WHEN x THEN y WHEN a THEN b ELSE z END)'
@@ -308,7 +253,7 @@ describe "Array#case and Hash#case" do
   end
 end
 
-describe "Array#sql_value_list and #sql_array" do
+describe "Array#sql_value_list" do
   before do
     @d = Sequel.mock.dataset
   end
@@ -316,17 +261,11 @@ describe "Array#sql_value_list and #sql_array" do
   it "should treat the array as an SQL value list instead of conditions when used as a placeholder value" do
     @d.filter(Sequel.lit("(a, b) IN ?", [[:x, 1], [:y, 2]])).sql.must_equal 'SELECT * WHERE ((a, b) IN ((x = 1) AND (y = 2)))'
     @d.filter(Sequel.lit("(a, b) IN ?", [[:x, 1], [:y, 2]].sql_value_list)).sql.must_equal 'SELECT * WHERE ((a, b) IN ((x, 1), (y, 2)))'
-    deprecated do
-      @d.filter(Sequel.lit("(a, b) IN ?", [[:x, 1], [:y, 2]].sql_array)).sql.must_equal 'SELECT * WHERE ((a, b) IN ((x, 1), (y, 2)))'
-    end
   end
 
   it "should be no difference when used as a hash value" do
     @d.filter([:a, :b]=>[[:x, 1], [:y, 2]]).sql.must_equal 'SELECT * WHERE ((a, b) IN ((x, 1), (y, 2)))'
     @d.filter([:a, :b]=>[[:x, 1], [:y, 2]].sql_value_list).sql.must_equal 'SELECT * WHERE ((a, b) IN ((x, 1), (y, 2)))'
-    deprecated do
-      @d.filter([:a, :b]=>[[:x, 1], [:y, 2]].sql_array).sql.must_equal 'SELECT * WHERE ((a, b) IN ((x, 1), (y, 2)))'
-    end
   end
 end
 
@@ -501,17 +440,6 @@ describe "Blob" do
   it "#to_sequel_blob should return self" do
     blob = "x".to_sequel_blob
     blob.to_sequel_blob.object_id.must_equal blob.object_id
-  end
-end
-
-if RUBY_VERSION < '1.9.0'
-  describe "Symbol#[]" do
-    it "should format an SQL Function" do
-      ds = Sequel.mock.dataset
-      ds.literal(:xyz[]).must_equal 'xyz()'
-      ds.literal(:xyz[1]).must_equal 'xyz(1)'
-      ds.literal(:xyz[1, 2, :abc[3]]).must_equal 'xyz(1, 2, abc(3))'
-    end
   end
 end
 
@@ -740,11 +668,7 @@ describe "symbol_aref extensions" do
   end
 
   it "should not affect other arguments to Symbol#[]" do
-    if RUBY_VERSION >= '1.9'
-      :x[0].must_equal "x"
-    else
-      @db.literal(:x[0]).must_equal "x(0)"
-    end
+    :x[0].must_equal "x"
   end
 end
 

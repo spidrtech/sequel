@@ -1,17 +1,12 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper')
+require_relative "spec_helper"
 
 describe "DB#create_table" do
   before do
     @db = Sequel.mock
   end
   
-  deprecated "should support an CreateTableGenerator as second argument" do
-    @db.create_table(:cats, Sequel::Schema::CreateTableGenerator.new(@db){})
-    @db.sqls.must_equal ['CREATE TABLE cats ()']
-  end
-  
   it "should accept the table name" do
-    @db.create_table(:cats) {}
+    @db.create_table(:cats){}.must_be_nil
     @db.sqls.must_equal ['CREATE TABLE cats ()']
   end
 
@@ -514,15 +509,22 @@ describe "DB#create_table" do
   end
 
   it "should ignore errors if the database raises an error on an index creation statement and the :ignore_index_errors option is used" do
-    meta_def(@db, :execute_ddl){|*a| raise Sequel::DatabaseError if /blah/.match(a.first); super(*a)}
+    @db.define_singleton_method(:execute_ddl){|*a| raise Sequel::DatabaseError if /blah/.match(a.first); super(*a)}
     lambda{@db.create_table(:cats){Integer :id; index :blah; index :id}}.must_raise(Sequel::DatabaseError)
     @db.sqls.must_equal ['CREATE TABLE cats (id integer)']
     @db.create_table(:cats, :ignore_index_errors=>true){Integer :id; index :blah; index :id}
     @db.sqls.must_equal ['CREATE TABLE cats (id integer)', 'CREATE INDEX cats_id_index ON cats (id)']
   end
 
-  it "should use savepoints around index creation if running inside a transaction if :ignore_index_errors option is used" do
-    meta_def(@db, :execute_ddl){|*a| super(*a); raise Sequel::DatabaseError if /blah/.match(a.first)}
+  it "should not use savepoints around index creation if running inside a transaction if :ignore_index_errors option is used" do
+    @db.define_singleton_method(:execute_ddl){|*a| super(*a); raise Sequel::DatabaseError if /blah/.match(a.first)}
+    @db.transaction{@db.create_table(:cats, :ignore_index_errors=>true){Integer :id; index :blah; index :id}}
+    @db.sqls.must_equal ["BEGIN", "CREATE TABLE cats (id integer)", "CREATE INDEX cats_blah_index ON cats (blah)", "CREATE INDEX cats_id_index ON cats (id)", "COMMIT"]
+  end
+
+  it "should use savepoints around index creation if running inside a transaction if :ignore_index_errors option is used and transactional schema modifications are supported" do
+    @db.define_singleton_method(:supports_transactional_ddl?){true}
+    @db.define_singleton_method(:execute_ddl){|*a| super(*a); raise Sequel::DatabaseError if /blah/.match(a.first)}
     @db.transaction{@db.create_table(:cats, :ignore_index_errors=>true){Integer :id; index :blah; index :id}}
     @db.sqls.must_equal ["BEGIN", "CREATE TABLE cats (id integer)", "SAVEPOINT autopoint_1", "CREATE INDEX cats_blah_index ON cats (blah)", "ROLLBACK TO SAVEPOINT autopoint_1", "SAVEPOINT autopoint_1", "CREATE INDEX cats_id_index ON cats (id)", "RELEASE SAVEPOINT autopoint_1", "COMMIT"]
   end
@@ -613,7 +615,7 @@ describe "DB#create_table" do
     @db.sqls.must_equal ["CREATE TABLE cats (CHECK (price = 100))"]
   end
 
-  deprecated "should accept array constraints" do
+  it "should accept array constraints" do
     @db.create_table(:cats) do
       check [Sequel.expr(:x) > 0, Sequel.expr(:y) < 1]
     end
@@ -757,19 +759,19 @@ describe "DB#create_table!" do
   end
   
   it "should create the table if it does not exist" do
-    meta_def(@db, :table_exists?){|a| false}
-    @db.create_table!(:cats){|*a|}
+    @db.define_singleton_method(:table_exists?){|a| false}
+    @db.create_table!(:cats){|*a|}.must_be_nil
     @db.sqls.must_equal ['CREATE TABLE cats ()']
   end
   
   it "should drop the table before creating it if it already exists" do
-    meta_def(@db, :table_exists?){|a| true}
+    @db.define_singleton_method(:table_exists?){|a| true}
     @db.create_table!(:cats){|*a|}
     @db.sqls.must_equal ['DROP TABLE cats', 'CREATE TABLE cats ()']
   end
   
   it "should use IF EXISTS if the database supports it" do
-    meta_def(@db, :supports_drop_table_if_exists?){true}
+    @db.define_singleton_method(:supports_drop_table_if_exists?){true}
     @db.create_table!(:cats){|*a|}
     @db.sqls.must_equal ['DROP TABLE IF EXISTS cats', 'CREATE TABLE cats ()']
   end
@@ -781,30 +783,30 @@ describe "DB#create_table?" do
   end
   
   it "should not create the table if the table already exists" do
-    meta_def(@db, :table_exists?){|a| true}
-    @db.create_table?(:cats){|*a|}
+    @db.define_singleton_method(:table_exists?){|a| true}
+    @db.create_table?(:cats){|*a|}.must_be_nil
     @db.sqls.must_equal []
   end
   
   it "should create the table if the table doesn't already exist" do
-    meta_def(@db, :table_exists?){|a| false}
+    @db.define_singleton_method(:table_exists?){|a| false}
     @db.create_table?(:cats){|*a|}
     @db.sqls.must_equal ['CREATE TABLE cats ()']
   end
   
   it "should use IF NOT EXISTS if the database supports that" do
-    meta_def(@db, :supports_create_table_if_not_exists?){true}
+    @db.define_singleton_method(:supports_create_table_if_not_exists?){true}
     @db.create_table?(:cats){|*a|}
     @db.sqls.must_equal ['CREATE TABLE IF NOT EXISTS cats ()']
   end
   
   it "should not use IF NOT EXISTS if the indexes are created" do
-    meta_def(@db, :table_exists?){|a| false}
-    meta_def(@db, :supports_create_table_if_not_exists?){true}
+    @db.define_singleton_method(:table_exists?){|a| false}
+    @db.define_singleton_method(:supports_create_table_if_not_exists?){true}
     @db.create_table?(:cats){|*a| Integer :a, :index=>true}
     @db.sqls.must_equal ['CREATE TABLE cats (a integer)', 'CREATE INDEX cats_a_index ON cats (a)']
 
-    meta_def(@db, :table_exists?){|a| true}
+    @db.define_singleton_method(:table_exists?){|a| true}
     @db.create_table?(:cats){|*a| Integer :a, :index=>true}
     @db.sqls.must_equal []
   end
@@ -816,7 +818,7 @@ describe "DB#create_join_table" do
   end
   
   it "should take a hash with foreign keys and table name values" do
-    @db.create_join_table(:cat_id=>:cats, :dog_id=>:dogs)
+    @db.create_join_table(:cat_id=>:cats, :dog_id=>:dogs).must_be_nil
     @db.sqls.must_equal ['CREATE TABLE cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))', 'CREATE INDEX cats_dogs_dog_id_cat_id_index ON cats_dogs (dog_id, cat_id)']
   end
   
@@ -864,30 +866,30 @@ describe "DB#create_join_table?" do
   end
   
   it "should create the table if it does not already exist" do
-    meta_def(@db, :table_exists?){|a| false}
-    @db.create_join_table?(:cat_id=>:cats, :dog_id=>:dogs)
+    @db.define_singleton_method(:table_exists?){|a| false}
+    @db.create_join_table?(:cat_id=>:cats, :dog_id=>:dogs).must_be_nil
     @db.sqls.must_equal ['CREATE TABLE cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))', 'CREATE INDEX cats_dogs_dog_id_cat_id_index ON cats_dogs (dog_id, cat_id)']
   end
 
   it "should not create the table if it already exists" do
-    meta_def(@db, :table_exists?){|a| true}
+    @db.define_singleton_method(:table_exists?){|a| true}
     @db.create_join_table?(:cat_id=>:cats, :dog_id=>:dogs)
     @db.sqls.must_equal []
   end
 
   it "should not use IF NOT EXISTS" do
-    meta_def(@db, :table_exists?){|a| false}
-    meta_def(@db, :supports_create_table_if_not_exists?){true}
+    @db.define_singleton_method(:table_exists?){|a| false}
+    @db.define_singleton_method(:supports_create_table_if_not_exists?){true}
     @db.create_join_table?(:cat_id=>:cats, :dog_id=>:dogs)
     @db.sqls.must_equal ['CREATE TABLE cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))', 'CREATE INDEX cats_dogs_dog_id_cat_id_index ON cats_dogs (dog_id, cat_id)']
 
-    meta_def(@db, :table_exists?){|a| true}
+    @db.define_singleton_method(:table_exists?){|a| true}
     @db.create_join_table?(:cat_id=>:cats, :dog_id=>:dogs)
     @db.sqls.must_equal []
   end
 
   it "should not use IF NOT EXISTS if no_index is used" do
-    meta_def(@db, :supports_create_table_if_not_exists?){true}
+    @db.define_singleton_method(:supports_create_table_if_not_exists?){true}
     @db.create_join_table?({:cat_id=>:cats, :dog_id=>:dogs}, :no_index=>true)
     @db.sqls.must_equal ['CREATE TABLE IF NOT EXISTS cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))']
   end
@@ -899,19 +901,19 @@ describe "DB#create_join_table!" do
   end
   
   it "should drop the table first if it already exists" do
-    meta_def(@db, :table_exists?){|a| true}
-    @db.create_join_table!(:cat_id=>:cats, :dog_id=>:dogs)
+    @db.define_singleton_method(:table_exists?){|a| true}
+    @db.create_join_table!(:cat_id=>:cats, :dog_id=>:dogs).must_be_nil
     @db.sqls.must_equal ['DROP TABLE cats_dogs', 'CREATE TABLE cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))', 'CREATE INDEX cats_dogs_dog_id_cat_id_index ON cats_dogs (dog_id, cat_id)']
   end
 
   it "should not drop the table if it doesn't exists" do
-    meta_def(@db, :table_exists?){|a| false}
+    @db.define_singleton_method(:table_exists?){|a| false}
     @db.create_join_table!(:cat_id=>:cats, :dog_id=>:dogs)
     @db.sqls.must_equal ['CREATE TABLE cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))', 'CREATE INDEX cats_dogs_dog_id_cat_id_index ON cats_dogs (dog_id, cat_id)']
   end
 
   it "should use IF EXISTS if the database supports it" do
-    meta_def(@db, :supports_drop_table_if_exists?){true}
+    @db.define_singleton_method(:supports_drop_table_if_exists?){true}
     @db.create_join_table!(:cat_id=>:cats, :dog_id=>:dogs)
     @db.sqls.must_equal ['DROP TABLE IF EXISTS cats_dogs', 'CREATE TABLE cats_dogs (cat_id integer NOT NULL REFERENCES cats, dog_id integer NOT NULL REFERENCES dogs, PRIMARY KEY (cat_id, dog_id))', 'CREATE INDEX cats_dogs_dog_id_cat_id_index ON cats_dogs (dog_id, cat_id)']
   end
@@ -923,7 +925,7 @@ describe "DB#drop_join_table" do
   end
   
   it "should take a hash with foreign keys and table name values and drop the table" do
-    @db.drop_join_table(:cat_id=>:cats, :dog_id=>:dogs)
+    @db.drop_join_table(:cat_id=>:cats, :dog_id=>:dogs).must_be_nil
     @db.sqls.must_equal ['DROP TABLE cats_dogs']
   end
   
@@ -956,7 +958,7 @@ describe "DB#drop_table" do
   end
 
   it "should generate a DROP TABLE statement" do
-    @db.drop_table :cats
+    @db.drop_table(:cats).must_be_nil
     @db.sqls.must_equal ['DROP TABLE cats']
   end
 
@@ -977,37 +979,37 @@ describe "DB#drop_table?" do
   end
   
   it "should drop the table if it exists" do
-    meta_def(@db, :table_exists?){|a| true}
-    @db.drop_table?(:cats)
+    @db.define_singleton_method(:table_exists?){|a| true}
+    @db.drop_table?(:cats).must_be_nil
     @db.sqls.must_equal ["DROP TABLE cats"]
   end
   
   it "should do nothing if the table does not exist" do
-    meta_def(@db, :table_exists?){|a| false}
+    @db.define_singleton_method(:table_exists?){|a| false}
     @db.drop_table?(:cats)
     @db.sqls.must_equal []
   end
   
   it "should operate on multiple tables at once" do
-    meta_def(@db, :table_exists?){|a| a == :cats}
+    @db.define_singleton_method(:table_exists?){|a| a == :cats}
     @db.drop_table? :cats, :dogs
     @db.sqls.must_equal ['DROP TABLE cats']
   end
 
   it "should take an options hash and support the :cascade option" do
-    meta_def(@db, :table_exists?){|a| true}
+    @db.define_singleton_method(:table_exists?){|a| true}
     @db.drop_table? :cats, :dogs, :cascade=>true
     @db.sqls.must_equal ['DROP TABLE cats CASCADE', 'DROP TABLE dogs CASCADE']
   end
 
   it "should use IF NOT EXISTS if the database supports that" do
-    meta_def(@db, :supports_drop_table_if_exists?){true}
+    @db.define_singleton_method(:supports_drop_table_if_exists?){true}
     @db.drop_table? :cats, :dogs
     @db.sqls.must_equal ['DROP TABLE IF EXISTS cats', 'DROP TABLE IF EXISTS dogs']
   end
 
   it "should use IF NOT EXISTS with CASCADE if the database supports that" do
-    meta_def(@db, :supports_drop_table_if_exists?){true}
+    @db.define_singleton_method(:supports_drop_table_if_exists?){true}
     @db.drop_table? :cats, :dogs, :cascade=>true
     @db.sqls.must_equal ['DROP TABLE IF EXISTS cats CASCADE', 'DROP TABLE IF EXISTS dogs CASCADE']
   end
@@ -1018,15 +1020,10 @@ describe "DB#alter_table" do
     @db = Sequel.mock
   end
   
-  deprecated "should support an AlterTableGenerator as second argument" do
-    @db.alter_table(:cats, Sequel::Schema::AlterTableGenerator.new(@db){set_column_allow_null :score, false})
-    @db.sqls.must_equal ["ALTER TABLE cats ALTER COLUMN score SET NOT NULL"]
-  end
-  
   it "should allow adding not null constraint via set_column_allow_null with false argument" do
     @db.alter_table(:cats) do
       set_column_allow_null :score, false
-    end
+    end.must_be_nil
     @db.sqls.must_equal ["ALTER TABLE cats ALTER COLUMN score SET NOT NULL"]
   end
   
@@ -1128,7 +1125,7 @@ describe "DB#alter_table" do
   end
 
   it "should ignore errors if the database raises an error on an add_index call and the :ignore_errors option is used" do
-    meta_def(@db, :execute_ddl){|*a| raise Sequel::DatabaseError}
+    @db.define_singleton_method(:execute_ddl){|*a| raise Sequel::DatabaseError}
     lambda{@db.add_index(:cats, :id)}.must_raise(Sequel::DatabaseError)
     @db.add_index(:cats, :id, :ignore_errors=>true)
     @db.sqls.must_equal []
@@ -1207,6 +1204,20 @@ describe "DB#alter_table" do
     @db.sqls.must_equal ["ALTER TABLE cats DROP CONSTRAINT cats_node_id_fkey", "ALTER TABLE cats DROP COLUMN node_id"]
   end
 
+  it "should support drop_foreign_key with :foreign_key_constraint_name option" do
+    @db.alter_table(:cats) do
+      drop_foreign_key :node_id, :foreign_key_constraint_name=>:foo
+    end
+    @db.sqls.must_equal ["ALTER TABLE cats DROP CONSTRAINT foo", "ALTER TABLE cats DROP COLUMN node_id"]
+  end
+
+  it "should support drop_foreign_key with :name option" do
+    @db.alter_table(:cats) do
+      drop_foreign_key :node_id, :name=>:foo
+    end
+    @db.sqls.must_equal ["ALTER TABLE cats DROP CONSTRAINT foo", "ALTER TABLE cats DROP COLUMN node_id"]
+  end
+
   it "should support drop_foreign_key with composite foreign keys" do
     def @db.foreign_key_list(table_name)
       [{:name=>:cats_node_id_prop_id_fkey, :columns=>[:node_id, :prop_id]}] 
@@ -1283,7 +1294,7 @@ describe "DB#alter_table" do
   end
 
   it "should combine operations into a single query if the database supports it" do
-    meta_def(@db, :supports_combining_alter_table_ops?){true}
+    @db.define_singleton_method(:supports_combining_alter_table_ops?){true}
     @db.alter_table(:cats) do
       add_column :a, Integer
       drop_column :b
@@ -1298,7 +1309,7 @@ describe "DB#alter_table" do
   end
   
   it "should combine operations into consecutive groups of combinable operations if the database supports combining operations" do
-    meta_def(@db, :supports_combining_alter_table_ops?){true}
+    @db.define_singleton_method(:supports_combining_alter_table_ops?){true}
     @db.alter_table(:cats) do
       add_column :a, Integer
       drop_column :b
@@ -1373,7 +1384,7 @@ end
 describe "Database#add_column" do
   it "should construct proper SQL" do
     db = Sequel.mock
-    db.add_column :test, :name, :text, :unique => true
+    db.add_column(:test, :name, :text, :unique => true).must_be_nil
     db.sqls.must_equal ['ALTER TABLE test ADD COLUMN name text UNIQUE']
   end
 end
@@ -1384,7 +1395,7 @@ describe "Database#drop_column" do
   end
   
   it "should construct proper SQL" do
-    @db.drop_column :test, :name
+    @db.drop_column(:test, :name).must_be_nil
     @db.sqls.must_equal ['ALTER TABLE test DROP COLUMN name']
   end
   
@@ -1400,7 +1411,7 @@ describe "Database#rename_column" do
   end
   
   it "should construct proper SQL" do
-    @db.rename_column :test, :abc, :def
+    @db.rename_column(:test, :abc, :def).must_be_nil
     @db.sqls.must_equal ['ALTER TABLE test RENAME COLUMN abc TO def']
   end
 end
@@ -1411,7 +1422,7 @@ describe "Database#set_column_type" do
   end
   
   it "should construct proper SQL" do
-    @db.set_column_type :test, :name, :integer
+    @db.set_column_type(:test, :name, :integer).must_be_nil
     @db.sqls.must_equal ['ALTER TABLE test ALTER COLUMN name TYPE integer']
   end
 end
@@ -1422,7 +1433,7 @@ describe "Database#set_column_default" do
   end
   
   it "should construct proper SQL" do
-    @db.set_column_default :test, :name, 'zyx'
+    @db.set_column_default(:test, :name, 'zyx').must_be_nil
     @db.sqls.must_equal ["ALTER TABLE test ALTER COLUMN name SET DEFAULT 'zyx'"]
   end
 end
@@ -1433,7 +1444,7 @@ describe "Database#add_index" do
   end
   
   it "should construct proper SQL" do
-    @db.add_index :test, :name, :unique => true
+    @db.add_index(:test, :name, :unique => true).must_be_nil
     @db.sqls.must_equal ['CREATE UNIQUE INDEX test_name_index ON test (name)']
   end
   
@@ -1449,7 +1460,7 @@ describe "Database#drop_index" do
   end
   
   it "should construct proper SQL" do
-    @db.drop_index :test, :name
+    @db.drop_index(:test, :name).must_be_nil
     @db.sqls.must_equal ['DROP INDEX test_name_index']
   end
   
@@ -1461,7 +1472,7 @@ describe "Database#drop_table" do
   end
   
   it "should construct proper SQL" do
-    @db.drop_table :test
+    @db.drop_table(:test).must_be_nil
     @db.sqls.must_equal ['DROP TABLE test']
   end
   
@@ -1477,7 +1488,7 @@ describe "Database#rename_table" do
   end
   
   it "should construct proper SQL" do
-    @db.rename_table :abc, :xyz
+    @db.rename_table(:abc, :xyz).must_be_nil
     @db.sqls.must_equal ['ALTER TABLE abc RENAME TO xyz']
   end
 end
@@ -1488,7 +1499,7 @@ describe "Database#create_view" do
   end
   
   it "should construct proper SQL with raw SQL" do
-    @db.create_view :test, "SELECT * FROM xyz"
+    @db.create_view(:test, "SELECT * FROM xyz").must_be_nil
     @db.sqls.must_equal ['CREATE VIEW test AS SELECT * FROM xyz']
     @db.create_view Sequel.identifier(:test), "SELECT * FROM xyz"
     @db.sqls.must_equal ['CREATE VIEW test AS SELECT * FROM xyz']
@@ -1540,7 +1551,7 @@ describe "Database#drop_view" do
   end
   
   with_symbol_splitting "should construct proper SQL for splittable symbols" do
-    @db.drop_view :sch__test
+    @db.drop_view(:sch__test).must_be_nil
     @db.sqls.must_equal ['DROP VIEW sch.test']
   end
 
@@ -1580,21 +1591,21 @@ describe "Schema Parser" do
   end
 
   it "should raise an error if there are no columns" do
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       []
     end
     proc{@db.schema(:x)}.must_raise(Sequel::Error)
   end
 
   it "should cache data by default" do
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       [[:a, {}]]
     end
     @db.schema(:x).must_be_same_as(@db.schema(:x))
   end
 
   it "should not cache data if :reload=>true is given" do
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       [[:a, {}]]
     end
     @db.schema(:x).wont_be_same_as(@db.schema(:x, :reload=>true))
@@ -1602,7 +1613,7 @@ describe "Schema Parser" do
 
   it "should not cache schema metadata if cache_schema is false" do
     @db.cache_schema = false
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       [[:a, {}]]
     end
     @db.schema(:x).wont_be_same_as(@db.schema(:x))
@@ -1610,7 +1621,7 @@ describe "Schema Parser" do
 
   it "should provide options if given a table name" do
     c = nil
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       c = [t, opts]
       [[:a, {:db_type=>t.to_s}]]
     end
@@ -1625,7 +1636,7 @@ describe "Schema Parser" do
 
   with_symbol_splitting "should provide options if given a table name with splittable symbols" do
     c = nil
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       c = [t, opts]
       [[:a, {:db_type=>t.to_s}]]
     end
@@ -1639,7 +1650,7 @@ describe "Schema Parser" do
   it "should parse the schema correctly for a single table" do
     sqls = @sqls
     proc{@db.schema(:x)}.must_raise(Sequel::Error)
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       sqls << t
       [[:a, {:db_type=>t.to_s}]]
     end
@@ -1652,33 +1663,33 @@ describe "Schema Parser" do
   end
 
   it "should set :auto_increment to true by default if unset and a single integer primary key is used" do
-    meta_def(@db, :schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'integer'}]]}
+    @db.define_singleton_method(:schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'integer'}]]}
     @db.schema(:x).first.last[:auto_increment].must_equal true
   end
 
   it "should not set :auto_increment if already set" do
-    meta_def(@db, :schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'integer', :auto_increment=>false}]]}
+    @db.define_singleton_method(:schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'integer', :auto_increment=>false}]]}
     @db.schema(:x).first.last[:auto_increment].must_equal false
   end
 
   it "should set :auto_increment to false by default if unset and a single nonintegery primary key is used" do
-    meta_def(@db, :schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'varchar'}]]}
+    @db.define_singleton_method(:schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'varchar'}]]}
     @db.schema(:x).first.last[:auto_increment].must_equal false
   end
 
   it "should set :auto_increment to false by default if unset and a composite primary key" do
-    meta_def(@db, :schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'integer'}], [:b, {:primary_key=>true, :db_type=>'integer'}]]}
+    @db.define_singleton_method(:schema_parse_table){|*| [[:a, {:primary_key=>true, :db_type=>'integer'}], [:b, {:primary_key=>true, :db_type=>'integer'}]]}
     @db.schema(:x).first.last[:auto_increment].must_equal false
     @db.schema(:x).last.last[:auto_increment].must_equal false
   end
 
   it "should set :auto_increment to true by default if set and not the first column" do
-    meta_def(@db, :schema_parse_table){|*| [[:b, {}], [:a, {:primary_key=>true, :db_type=>'integer'}]]}
+    @db.define_singleton_method(:schema_parse_table){|*| [[:b, {}], [:a, {:primary_key=>true, :db_type=>'integer'}]]}
     @db.schema(:x).last.last[:auto_increment].must_equal true
   end
 
   it "should convert various types of table name arguments" do
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       [[t, opts]]
     end
     s1 = @db.schema(:x)
@@ -1703,7 +1714,7 @@ describe "Schema Parser" do
   end
 
   with_symbol_splitting "should convert splittable symbol arguments" do
-    meta_def(@db, :schema_parse_table) do |t, opts|
+    @db.define_singleton_method(:schema_parse_table) do |t, opts|
       [[t, opts]]
     end
     s1 = @db.schema(:x)

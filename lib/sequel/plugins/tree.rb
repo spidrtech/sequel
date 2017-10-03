@@ -2,7 +2,7 @@
 
 module Sequel
   module Plugins
-    # The Tree plugin adds additional associations and methods that allow you to 
+    # The tree plugin adds additional associations and methods that allow you to 
     # treat a Model as a tree.  
     #
     # A column for holding the parent key is required and is :parent_id by default.  
@@ -21,7 +21,7 @@ module Sequel
     #   end
     #  
     #   class Node < Sequel::Model
-    #     plugin :tree, :key=>:parentid, :order=>:position
+    #     plugin :tree, key: :parentid, order: :position
     #   end
     module Tree
       # Create parent and children associations.  Any options
@@ -33,7 +33,7 @@ module Sequel
         opts = opts.dup
         opts[:class] = model
 
-        model.instance_eval do
+        model.instance_exec do
           @parent_column = (opts[:key] ||= :parent_id)
           @tree_order = opts[:order]
         end

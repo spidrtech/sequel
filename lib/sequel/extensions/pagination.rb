@@ -64,10 +64,8 @@ module Sequel
 
   class Dataset
     # Holds methods that only relate to paginated datasets. Paginated dataset
-    # have pages starting at 1 (page 1 is offset 0, page 1 is offset page_size).
+    # have pages starting at 1 (page 1 is offset 0, page 2 is offset 1 * page_size).
     module Pagination
-      Sequel::Dataset.def_deprecated_opts_setter(self, :page_size, :page_count, :current_page, :pagination_record_count)
-
       # The number of records per page (the final page may have fewer than
       # this number of records).
       def page_size
@@ -135,20 +133,6 @@ module Sequel
       def prev_page
         current_page > 1 ? (current_page - 1) : nil
       end
-
-      # SEQUEL5: Remove
-      # :nocov:
-      def set_pagination_info(page_no, page_size, record_count)
-        Sequel::Deprecation.deprecate("Dataset#set_pagination_info", "It should no longer be necessary to call this method")
-        self.current_page = page_no
-        self.page_size = page_size
-        self.pagination_record_count = record_count
-        page_count = (record_count / page_size.to_f).ceil
-        page_count = 1 if page_count == 0
-        self.page_count = page_count
-        self
-      end
-      # :nocov:
     end
   end
 

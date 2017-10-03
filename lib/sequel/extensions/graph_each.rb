@@ -4,7 +4,7 @@
 # makes Dataset#each call #graph_each if the dataset has been graphed.
 # Dataset#graph_each splits result hashes into subhashes per table:
 #
-#   DB[:a].graph(:b, :id=>:b_id).all
+#   DB[:a].graph(:b, id: :b_id).all
 #   # => {:a=>{:id=>1, :b_id=>2}, :b=>{:id=>2}}
 #
 # You can load this extension into specific datasets:
@@ -56,7 +56,7 @@ module Sequel
       datasets = datasets.map{|ta, ds| [ta, ds, ds.row_proc]}
       # Use the manually set graph aliases, if any, otherwise
       # use the ones automatically created by .graph
-      column_aliases = @opts[:graph_aliases] || @opts[:graph][:column_aliases] # SEQUEL5: Remove :graph_aliases support
+      column_aliases = @opts[:graph][:column_aliases]
       fetch_rows(sql) do |r|
         graph = {}
         # Create the sub hashes, one per table

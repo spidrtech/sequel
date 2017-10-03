@@ -8,35 +8,13 @@ module Sequel
     # ---------------------
 
     # Array of supported database adapters
-    ADAPTERS = %w'ado amalgalite cubrid do ibmdb jdbc mock mysql mysql2 odbc oracle postgres sqlanywhere sqlite swift tinytds'.map(&:to_sym)
-    # SEQUEL5: Remove cubrid do swift
-
-    def self.single_threaded
-      Sequel::Deprecation.deprecate("Sequel::Database.single_threaded", "Use Sequel.single_threaded instead")
-      Sequel.single_threaded
-    end
-
-    def self.single_threaded=(v)
-      Sequel::Deprecation.deprecate("Sequel::Database.single_threaded=", "Use Sequel.single_threaded= instead")
-      Sequel.single_threaded = v
-    end
+    ADAPTERS = %w'ado amalgalite ibmdb jdbc mock mysql mysql2 odbc oracle postgres sqlanywhere sqlite tinytds'.map(&:to_sym)
 
     # The Database subclass for the given adapter scheme.
     # Raises Sequel::AdapterNotFound if the adapter
     # could not be loaded.
     def self.adapter_class(scheme)
-      return scheme if scheme.is_a?(Class)
-
-      if scheme.to_s.include?('-')
-        # :nocov:
-        Sequel::Deprecation.deprecate("Automatically converting '-' to '_' in adapter schemes", "Use '_' instead of '-' in the adapter scheme")
-        # :nocov:
-      end
-
-      scheme = scheme.to_s.gsub('-', '_').to_sym # SEQUEL5: Remove
-      # scheme = scheme.to_sym # SEQUEL5
-
-      load_adapter(scheme)
+      scheme.is_a?(Class) ? scheme : load_adapter(scheme.to_sym)
     end
 
     # Returns the scheme symbol for the Database class.
@@ -48,9 +26,8 @@ module Sequel
     def self.connect(conn_string, opts = OPTS)
       case conn_string
       when String
-        # SEQUEL5: Remove do
-        if match = /\A(jdbc|do):/.match(conn_string)
-          c = adapter_class(match[1].to_sym)
+        if conn_string.start_with?('jdbc:')
+          c = adapter_class(:jdbc)
           opts = opts.merge(:orig_opts=>opts.dup)
           opts = {:uri=>conn_string}.merge!(opts)
         else
@@ -69,16 +46,16 @@ module Sequel
       else
         raise Error, "Sequel::Database.connect takes either a Hash or a String, given: #{conn_string.inspect}"
       end
-      # process opts a bit
+
       opts = opts.inject({}) do |m, (k,v)|
         k = :user if k.to_s == 'username'
         m[k.to_sym] = v
         m
       end
+
       begin
         db = c.new(opts)
-        # SEQUEL5: Default opts[:test] to true
-        db.test_connection if opts[:test] && db.send(:typecast_value_boolean, opts[:test])
+        db.test_connection if db.send(:typecast_value_boolean, opts.fetch(:test, true))
         if block_given?
           return yield(db)
         end
@@ -155,7 +132,6 @@ module Sequel
     #     end
     #
     #     module DatabaseMethods
-    #       extend Sequel::Database::ResetIdentifierMangling
     #       # ...
     #     end
     #
@@ -181,27 +157,26 @@ module Sequel
     # +database_type+ (for native adapters), in others (i.e. adapters with
     # subadapters), it will be different.
     #
-    #   Sequel.connect('jdbc:postgres://...').adapter_scheme # => :jdbc
+    #   Sequel.connect('jdbc:postgres://...').adapter_scheme
+    #   # => :jdbc
     def adapter_scheme
       self.class.adapter_scheme
     end
 
     # Dynamically add new servers or modify server options at runtime. Also adds new
-    # servers to the connection pool. Intended for use with master/slave or shard
-    # configurations where it is useful to add new server hosts at runtime.
+    # servers to the connection pool. Only usable when using a sharded connection pool.
     #
     # servers argument should be a hash with server name symbol keys and hash or
     # proc values.  If a servers key is already in use, it's value is overridden
     # with the value provided.
     #
-    #   DB.add_servers(:f=>{:host=>"hash_host_f"})
+    #   DB.add_servers(f: {host: "hash_host_f"})
     def add_servers(servers)
-      unless h = @opts[:servers]
-        Sequel::Deprecation.deprecate("Calling Database#add_servers on a database that does not use sharding", "This method should only be called if the database supports sharding")
-        # raise Error, "cannot call Database#add_servers on a Database instance that does not use a sharded connection pool" # SEQUEL5
-        return
+      unless sharded?
+        raise Error, "cannot call Database#add_servers on a Database instance that does not use a sharded connection pool"
       end
 
+      h = @opts[:servers]
       Sequel.synchronize{h.merge!(servers)}
       @pool.add_servers(servers.keys)
     end
@@ -213,7 +188,8 @@ module Sequel
     # type.  Even better, you can tell that two Database objects that are using
     # the same adapter are connecting to different database types.
     #
-    #   Sequel.connect('jdbc:postgres://...').database_type # => :postgres
+    #   Sequel.connect('jdbc:postgres://...').database_type
+    #   # => :postgres
     def database_type
       adapter_scheme
     end
@@ -226,8 +202,8 @@ module Sequel
     # Example:
     #
     #   DB.disconnect # All servers
-    #   DB.disconnect(:server=>:server1) # Single server
-    #   DB.disconnect(:server=>[:server1, :server2]) # Multiple servers
+    #   DB.disconnect(server: :server1) # Single server
+    #   DB.disconnect(server: [:server1, :server2]) # Multiple servers
     def disconnect(opts = OPTS)
       pool.disconnect(opts)
     end
@@ -239,20 +215,8 @@ module Sequel
       conn.close
     end
 
-    # Yield a new Database instance for every server in the connection pool.
-    # Intended for use in sharded environments where there is a need to make schema
-    # modifications (DDL queries) on each shard.
-    #
-    #   DB.each_server{|db| db.create_table(:users){primary_key :id; String :name}}
-    def each_server(&block)
-      Sequel::Deprecation.deprecate("Database#each_server", "Switching to using Dataset#servers and Database#with_server from the server_block extension: \"DB.servers.each{|s| DB.with_server(s){}}\"")
-      raise(Error, "Database#each_server must be passed a block") unless block
-      servers.each{|s| self.class.connect(server_opts(s), &block)}
-    end
-
-    # Dynamically remove existing servers from the connection pool. Intended for
-    # use with master/slave or shard configurations where it is useful to remove
-    # existing server hosts at runtime.
+    # Dynamically remove existing servers from the connection pool. Only usable
+    # when using a sharded connection pool
     #
     # servers should be symbols or arrays of symbols.  If a nonexistent server
     # is specified, it is ignored.  If no servers have been specified for
@@ -261,12 +225,11 @@ module Sequel
     #
     #   DB.remove_servers(:f1, :f2)
     def remove_servers(*servers)
-      unless h = @opts[:servers]
-        Sequel::Deprecation.deprecate("Calling Database#add_servers on a database that does not use sharding", "This method should only be called if the database supports sharding")
-        # raise Error, "cannot call Database#remove_servers on a Database instance that does not use a sharded connection pool" # SEQUEL5
-        return
+      unless sharded?
+        raise Error, "cannot call Database#remove_servers on a Database instance that does not use a sharded connection pool"
       end
 
+      h = @opts[:servers]
       servers.flatten.each{|s| Sequel.synchronize{h.delete(s)}}
       @pool.remove_servers(servers)
     end

@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe Sequel::Model::Associations::AssociationReflection, "#associated_class" do
   before do
@@ -15,14 +15,34 @@ describe Sequel::Model::Associations::AssociationReflection, "#associated_class"
     @c.association_reflection(:c).associated_class.must_equal ParParent
   end
 
+  it "should use the :class value if present" do
+    @c.many_to_one :c, :class=>@c
+    @c.one_to_many :cs, :class=>@c
+    c = @c.association_reflection(:c)
+    cs = @c.association_reflection(:cs)
+
+    c.association_method.must_equal :c
+    c.dataset_method.must_equal :c_dataset
+    c.setter_method.must_equal :c=
+    c._setter_method.must_equal :_c=
+
+    cs.association_method.must_equal :cs
+    cs.dataset_method.must_equal :cs_dataset
+    cs.add_method.must_equal :add_c
+    cs._add_method.must_equal :_add_c
+    cs.remove_method.must_equal :remove_c
+    cs._remove_method.must_equal :_remove_c
+    cs.remove_all_method.must_equal :remove_all_cs
+    cs._remove_all_method.must_equal :_remove_all_cs
+  end
+
   it "should have inspect include association class and representation of association definition " do
     ParParent.many_to_one :c
     ParParent.association_reflection(:c).inspect.must_equal "#<Sequel::Model::Associations::ManyToOneAssociationReflection ParParent.many_to_one :c>"
     ParParent.many_to_one :c, :class=>ParParent
     ParParent.association_reflection(:c).inspect.must_equal "#<Sequel::Model::Associations::ManyToOneAssociationReflection ParParent.many_to_one :c, :class=>ParParent>"
     ParParent.many_to_one :c, :class=>ParParent, :key=>:c_id
-    ["#<Sequel::Model::Associations::ManyToOneAssociationReflection ParParent.many_to_one :c, :key=>:c_id, :class=>ParParent>",
-     "#<Sequel::Model::Associations::ManyToOneAssociationReflection ParParent.many_to_one :c, :class=>ParParent, :key=>:c_id>"].must_include ParParent.association_reflection(:c).inspect
+    ParParent.association_reflection(:c).inspect.must_equal "#<Sequel::Model::Associations::ManyToOneAssociationReflection ParParent.many_to_one :c, :key=>:c_id, :class=>ParParent>"
 
     @c.one_to_many :foos do |ds| ds end
     @c.association_reflection(:foos).inspect.must_equal "#<Sequel::Model::Associations::OneToManyAssociationReflection #{@c.to_s}.one_to_many :foos, :block=>#{@c.association_reflection(:foos)[:block].inspect}>"
@@ -286,11 +306,6 @@ describe Sequel::Model::Associations::AssociationReflection do
     def @c.name() "C" end
   end
 
-  deprecated "#eager_loading_predicate_key should be an alias of predicate_key for backwards compatibility" do
-    @c.one_to_many :cs, :class=>@c
-    @c.dataset.literal(@c.association_reflection(:cs).eager_loading_predicate_key).must_equal 'foo.c_id'
-  end
-
   it "one_to_many #qualified_primary_key should be a qualified version of the primary key" do
     @c.one_to_many :cs, :class=>@c
     @c.dataset.literal(@c.association_reflection(:cs).qualified_primary_key).must_equal 'foo.id'
@@ -516,7 +531,7 @@ describe Sequel::Model, " association reflection methods" do
     c.associate :many_to_one, :parent2, :class => @c1
     @c1.associations.must_equal [:parent]
     c.associations.sort_by{|x| x.to_s}.must_equal [:parent, :parent2]
-    c.instance_methods.map{|x| x.to_s}.must_include('parent')
+    c.instance_methods.must_include(:parent)
   end
 end
 

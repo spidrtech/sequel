@@ -1,10 +1,10 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 asd = begin
   require 'active_support/duration'
   true
-rescue LoadError => e
-  skip_warn "date_arithmetic extension (partial): can't load active_support/duration (#{e.class}: #{e})"
+rescue LoadError
+  warn "Skipping some tests of date_arithmetic extension: can't load active_support/duration"
   false
 end
 

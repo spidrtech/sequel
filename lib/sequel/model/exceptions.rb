@@ -1,8 +1,8 @@
 # frozen-string-literal: true
 
 module Sequel
-  # Exception class raised when +raise_on_save_failure+ is set and a before hook returns false
-  # or an around hook doesn't call super or yield.
+  # Exception class raised when +raise_on_save_failure+ is set and an action is canceled in a hook.
+  # or an around hook doesn't yield.
   class HookFailed < Error
     # The Sequel::Model instance related to this error.
     attr_reader :model
@@ -13,10 +13,6 @@ module Sequel
     end
   end
 
-  # Alias for HookFailed, kept for backwards compatibility
-  BeforeHookFailed = HookFailed
-  Sequel::Deprecation.deprecate_constant(self, :BeforeHookFailed)
-  
   (
   # Exception class raised when +require_modification+ is set and an UPDATE or DELETE statement to modify the dataset doesn't
   # modify a single row.

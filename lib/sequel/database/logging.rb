@@ -34,13 +34,6 @@ module Sequel
 
     # Yield to the block, logging any errors at error level to all loggers,
     # and all other queries with the duration at warn or info level.
-    def log_yield(sql, args=nil, &block)
-      Sequel::Deprecation.deprecate("Sequel::Database#log_yield", "Update the adapter to use Sequel::Database#log_connection_yield")
-      log_connection_yield(sql, nil, args, &block)
-    end
-
-    # Yield to the block, logging any errors at error level to all loggers,
-    # and all other queries with the duration at warn or info level.
     def log_connection_yield(sql, conn, args=nil)
       return yield if @loggers.empty?
       sql = "#{connection_info(conn) if conn && log_connection_info}#{sql}#{"; #{args.inspect}" if args}"
@@ -73,7 +66,7 @@ module Sequel
     # Log the given SQL and then execute it on the connection, used by
     # the transaction code.
     def log_connection_execute(conn, sql)
-      log_connection_yield(sql, conn){conn.send(connection_execute_method, sql)}
+      log_connection_yield(sql, conn){conn.public_send(connection_execute_method, sql)}
     end
 
     # Log message with message prefixed by duration at info level, or
@@ -85,7 +78,7 @@ module Sequel
     # Log message at level (which should be :error, :warn, or :info)
     # to all loggers.
     def log_each(level, message)
-      @loggers.each{|logger| logger.send(level, message)}
+      @loggers.each{|logger| logger.public_send(level, message)}
     end
   end
 end

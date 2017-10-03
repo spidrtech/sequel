@@ -34,15 +34,15 @@ module Sequel
     #   Sequel::Model.plugin :caching, CACHE
     #
     #   # Make the Album class use the cache with a 30 minute time-to-live
-    #   Album.plugin :caching, CACHE, :ttl=>1800
+    #   Album.plugin :caching, CACHE, ttl: 1800
     #
     #   # Make the Artist class use a cache with the memcached protocol
-    #   Artist.plugin :caching, MEMCACHED_CACHE, :ignore_exceptions=>true
+    #   Artist.plugin :caching, MEMCACHED_CACHE, ignore_exceptions: true
     module Caching
       # Set the cache_store and cache_ttl attributes for the given model.
       # If the :ttl option is not given, 3600 seconds is the default.
       def self.configure(model, store, opts=OPTS)
-        model.instance_eval do
+        model.instance_exec do
           @cache_store = store
           @cache_ttl = opts[:ttl] || 3600
           @cache_ignore_exceptions = opts[:ignore_exceptions]
@@ -94,9 +94,9 @@ module Sequel
         # Access the cache using the given method and key, rescuing exceptions if necessary.
         def cache_op(meth, ck)
           if @cache_ignore_exceptions
-            @cache_store.send(meth, ck) rescue nil
+            @cache_store.public_send(meth, ck) rescue nil
           else
-            @cache_store.send(meth, ck)
+            @cache_store.public_send(meth, ck)
           end
         end
     

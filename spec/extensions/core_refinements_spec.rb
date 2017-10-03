@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 if (RUBY_VERSION >= '2.0.0' && RUBY_ENGINE == 'ruby') # || (RUBY_VERSION >= '2.3.0' && RUBY_ENGINE == 'jruby')
 Sequel.extension :core_refinements, :pg_array, :pg_hstore, :pg_row, :pg_range, :pg_row_ops, :pg_range_ops, :pg_array_ops, :pg_hstore_ops, :pg_json, :pg_json_ops
@@ -525,6 +525,4 @@ describe "Postgres extensions integration" do
     @db.literal((1..2).pg_range(:int4range)).must_equal "int4range(1,2,'[]')"
   end
 end
-else
-  skip_warn "core_refinements extension: only works on ruby 2.0+"
 end

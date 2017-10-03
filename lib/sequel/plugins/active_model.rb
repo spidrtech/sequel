@@ -3,7 +3,7 @@
 require 'active_model'
 module Sequel
   module Plugins
-    # The ActiveModel plugin makes Sequel::Model objects
+    # The active_model plugin makes Sequel::Model objects
     # pass the ActiveModel::Lint tests, which should
     # hopefully mean full ActiveModel compliance.  This should
     # allow the full support of Sequel::Model objects in Rails 3+.
@@ -18,9 +18,6 @@ module Sequel
     #   # Make the Album class active_model compliant
     #   Album.plugin :active_model
     module ActiveModel
-      DEFAULT_TO_PARAM_JOINER = '-'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DEFAULT_TO_PARAM_JOINER)
-      
       # ActiveModel compliant error class
       class Errors < Sequel::Model::Errors
         # Add autovivification so that #[] always returns an array.
@@ -82,7 +79,7 @@ module Sequel
           end
         end
 
-        # With the ActiveModel plugin, Sequel model objects are already
+        # With the active_model plugin, Sequel model objects are already
         # compliant, so this returns self.
         def to_model
           self

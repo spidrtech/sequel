@@ -3,19 +3,6 @@
 module Sequel
   module JDBC
     module Transactions
-      TRANSACTION_BEGIN = 'Transaction.begin'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_BEGIN)
-      TRANSACTION_COMMIT = 'Transaction.commit'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_COMMIT)
-      TRANSACTION_RELEASE_SP = 'Transaction.release_savepoint'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_RELEASE_SP)
-      TRANSACTION_ROLLBACK = 'Transaction.rollback'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_ROLLBACK)
-      TRANSACTION_ROLLBACK_SP = 'Transaction.rollback_savepoint'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_ROLLBACK_SP)
-      TRANSACTION_SAVEPOINT= 'Transaction.savepoint'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_SAVEPOINT)
-
       def freeze
         supports_savepoints?
         super
@@ -38,7 +25,7 @@ module Sequel
       JDBC_TRANSACTION_ISOLATION_LEVELS = {:uncommitted=>JavaSQL::Connection::TRANSACTION_READ_UNCOMMITTED,
         :committed=>JavaSQL::Connection::TRANSACTION_READ_COMMITTED,
         :repeatable=>JavaSQL::Connection::TRANSACTION_REPEATABLE_READ,
-        :serializable=>JavaSQL::Connection::TRANSACTION_SERIALIZABLE}#.freeze # SEQUEL5
+        :serializable=>JavaSQL::Connection::TRANSACTION_SERIALIZABLE}.freeze
 
       # Set the transaction isolation level on the given connection using
       # the JDBC API.

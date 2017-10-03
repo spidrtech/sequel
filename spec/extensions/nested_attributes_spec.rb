@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "NestedAttributes plugin" do
   def check_sqls(should, is)
@@ -49,12 +49,6 @@ describe "NestedAttributes plugin" do
     @db.sqls
   end
   
-  deprecated "should allow access to nested_attributes_module" do
-    @Artist.nested_attributes_module.must_be_kind_of Module
-    @Artist.nested_attributes_module = v = Module.new
-    @Artist.nested_attributes_module.must_equal v
-  end
-
   it "should support creating new many_to_one objects" do
     a = @Album.new({:name=>'Al', :artist_attributes=>{:name=>'Ar'}})
     @db.sqls.must_equal []
@@ -462,17 +456,6 @@ describe "NestedAttributes plugin" do
     ar.set(:albums_attributes=>[{:id=>10, :_delete=>'t'}])
   end
   
-  deprecated "should not raise an Error if an unmatched primary key is given, if the :strict=>false option is used" do
-    @Artist.nested_attributes :albums, :strict=>false
-    al = @Album.load(:id=>10, :name=>'Al')
-    ar = @Artist.load(:id=>20, :name=>'Ar')
-    ar.associations[:albums] = [al]
-    ar.set(:albums_attributes=>[{:id=>30, :_delete=>'t'}])
-    @db.sqls.must_equal []
-    ar.save
-    @db.sqls.must_equal ["UPDATE artists SET name = 'Ar' WHERE (id = 20)"]
-  end
-  
   it "should not raise an Error if an unmatched primary key is given, if the :unmatched_pk=>:ignore option is used" do
     @Artist.nested_attributes :albums, :unmatched_pk=>:ignore
     al = @Album.load(:id=>10, :name=>'Al')
@@ -490,17 +473,6 @@ describe "NestedAttributes plugin" do
     ar.associations[:concerts] = [co]
     proc{ar.set(:concerts_attributes=>[{:tour=>'To', :date=>'2004-04-04', :_delete=>'t'}])}.must_raise(Sequel::Error)
     ar.set(:concerts_attributes=>[{:tour=>'To', :date=>'2004-04-05', :_delete=>'t'}])
-  end
-
-  deprecated "should not raise an Error if an unmatched composite primary key is given, if the :strict=>false option is used" do
-    @Artist.nested_attributes :concerts, :strict=>false
-    ar = @Artist.load(:id=>10, :name=>'Ar')
-    co = @Concert.load(:tour=>'To', :date=>'2004-04-05', :playlist=>'Pl')
-    ar.associations[:concerts] = [co]
-    ar.set(:concerts_attributes=>[{:tour=>'To', :date=>'2004-04-06', :_delete=>'t'}])
-    @db.sqls.must_equal []
-    ar.save
-    @db.sqls.must_equal ["UPDATE artists SET name = 'Ar' WHERE (id = 10)"]
   end
 
   it "should not raise an Error if an unmatched composite primary key is given, if the :unmatched_pk=>:ignore option is used" do

@@ -1,9 +1,8 @@
 # frozen-string-literal: true
 
-if RUBY_VERSION >= '1.9.0'
 module Sequel
   module Plugins
-    # The ForceEncoding plugin allows you force specific encodings for all
+    # The force_encoding plugin allows you force specific encodings for all
     # strings that are used by the model.  When model instances are loaded
     # from the database, all values in the hash that are strings are
     # forced to the given encoding.  Whenever you update a model column
@@ -76,9 +75,4 @@ module Sequel
       end
     end
   end
-end
-else
-# :nocov:
-  raise LoadError, 'ForceEncoding plugin only works on Ruby 1.9+'
-# :nocov:
 end

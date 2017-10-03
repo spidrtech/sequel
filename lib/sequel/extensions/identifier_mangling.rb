@@ -120,10 +120,9 @@ module Sequel
       # Reset the identifier mangling options.  Overrides any already set on
       # the instance.  Only for internal use by shared adapters.
       def reset_identifier_mangling
-        # SEQUEL5: Stop checking Database.*
-        @quote_identifiers = @opts.fetch(:quote_identifiers){(qi = Database.quote_identifiers).nil? ? quote_identifiers_default : qi}
-        @identifier_input_method = @opts.fetch(:identifier_input_method){(iim = Database.identifier_input_method).nil? ? identifier_input_method_default : (iim if iim)}
-        @identifier_output_method = @opts.fetch(:identifier_output_method){(iom = Database.identifier_output_method).nil? ? identifier_output_method_default : (iom if iom)}
+        @quote_identifiers = @opts.fetch(:quote_identifiers, quote_identifiers_default)
+        @identifier_input_method = @opts.fetch(:identifier_input_method, identifier_input_method_default)
+        @identifier_output_method = @opts.fetch(:identifier_output_method, identifier_output_method_default)
         reset_default_dataset
       end
     end
@@ -135,25 +134,12 @@ module Sequel
         @opts.fetch(:identifier_input_method, db.identifier_input_method)
       end
       
-      # Set the method to call on identifiers going into the database for this dataset
-      def identifier_input_method=(v)
-        raise_if_frozen!(%w"identifier_input_method= with_identifier_input_method")
-        skip_symbol_cache!
-        @opts[:identifier_input_method] = v
-      end
-      
       # The String instance method to call on identifiers before sending them to
       # the database.
       def identifier_output_method
         @opts.fetch(:identifier_output_method, db.identifier_output_method)
       end
     
-      # Set the method to call on identifiers coming the database for this dataset
-      def identifier_output_method=(v)
-        raise_if_frozen!(%w"identifier_output_method= with_identifier_output_method")
-        @opts[:identifier_output_method] = v
-      end
-
       # Check with the database to see if identifier quoting is enabled
       def quote_identifiers?
         @opts.fetch(:quote_identifiers, db.quote_identifiers?)
@@ -174,14 +160,18 @@ module Sequel
       # Convert the identifier to the version used in the database via
       # identifier_input_method.
       def input_identifier(v)
-        (i = identifier_input_method) ? v.to_s.send(i) : v.to_s
+        (i = identifier_input_method) ? v.to_s.public_send(i) : v.to_s
       end
 
       # Modify the identifier returned from the database based on the
       # identifier_output_method.
       def output_identifier(v)
         v = 'untitled' if v == ''
-        (i = identifier_output_method) ? v.to_s.send(i).to_sym : v.to_sym
+        (i = identifier_output_method) ? v.to_s.public_send(i).to_sym : v.to_sym
+      end
+
+      def non_sql_option?(key)
+        super || key == :identifier_input_method || key == :identifier_output_method
       end
     end
   end

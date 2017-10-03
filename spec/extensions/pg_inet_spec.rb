@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "pg_inet extension" do
   ipv6_broken = (IPAddr.new('::1'); false) rescue true
@@ -17,19 +17,6 @@ describe "pg_inet extension" do
     @db.literal(IPAddr.new('2001:4f8:3:ba::/64')).must_equal "'2001:4f8:3:ba::/64'"
     @db.literal(IPAddr.new('2001:4f8:3:ba:2e0:81ff:fe22:d1f1')).must_equal "'2001:4f8:3:ba:2e0:81ff:fe22:d1f1/128'"
   end unless ipv6_broken
-
-  deprecated "should set up conversion procs correctly" do
-    cp = Sequel::Postgres::PG__TYPES
-    cp[869].call("127.0.0.1").must_equal IPAddr.new('127.0.0.1')
-    cp[650].call("127.0.0.1").must_equal IPAddr.new('127.0.0.1')
-  end
-
-  deprecated "should set up conversion procs for arrays correctly" do
-    cp = Sequel::Postgres::PG__TYPES
-    cp[1041].call("{127.0.0.1}").must_equal [IPAddr.new('127.0.0.1')]
-    cp[651].call("{127.0.0.1}").must_equal [IPAddr.new('127.0.0.1')]
-    cp[1040].call("{127.0.0.1}").must_equal ['127.0.0.1']
-  end
 
   it "should set up conversion procs correctly" do
     cp = @db.conversion_procs

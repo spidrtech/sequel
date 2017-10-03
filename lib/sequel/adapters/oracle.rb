@@ -1,7 +1,7 @@
 # frozen-string-literal: true
 
 require 'oci8'
-Sequel.require 'adapters/shared/oracle'
+require_relative 'shared/oracle'
 
 module Sequel
   module Oracle
@@ -13,12 +13,12 @@ module Sequel
       # ORA-01012: not logged on
       # ORA-03113: end-of-file on communication channel
       # ORA-03114: not connected to ORACLE
-      CONNECTION_ERROR_CODES = [ 28, 1012, 3113, 3114 ]#.freeze # SEQUEL5
+      CONNECTION_ERROR_CODES = [ 28, 1012, 3113, 3114 ].freeze
       
       ORACLE_TYPES = {
         :blob=>lambda{|b| Sequel::SQL::Blob.new(b.read)},
-        :clob=>lambda(&:read)
-      }#.freeze # SEQUEL5
+        :clob=>:read.to_proc
+      }.freeze
 
       # Hash of conversion procs for this database.
       attr_reader :conversion_procs
@@ -40,8 +40,8 @@ module Sequel
         
         # The ruby-oci8 gem which retrieves oracle columns with a type of
         # DATE, TIMESTAMP, TIMESTAMP WITH TIME ZONE is complex based on the
-        # ruby version (1.9.2 or later) and Oracle version (9 or later)
-        # In the now standard case of 1.9.2 and Oracle 9 or later, the timezone
+        # ruby version and Oracle version (9 or later)
+        # In the now standard case of Oracle 9 or later, the timezone
         # is determined by the Oracle session timezone. Thus if the user
         # requests Sequel provide UTC timezone to the application,
         # we need to alter the session timezone to be UTC
@@ -114,7 +114,7 @@ module Sequel
 
       PS_TYPES = {'string'=>String, 'integer'=>Integer, 'float'=>Float,
         'decimal'=>Float, 'date'=>Time, 'datetime'=>Time,
-        'time'=>Time, 'boolean'=>String, 'blob'=>OCI8::BLOB}#.freeze # SEQUEL5
+        'time'=>Time, 'boolean'=>String, 'blob'=>OCI8::BLOB}.freeze
       def cursor_bind_params(conn, cursor, args)
         i = 0
         args.map do |arg, type|
@@ -324,12 +324,6 @@ module Sequel
     class Dataset < Sequel::Dataset
       include DatasetMethods
 
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
-
-      PREPARED_ARG_PLACEHOLDER = ':'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PREPARED_ARG_PLACEHOLDER)
-      
       # Oracle already supports named bind arguments, so use directly.
       module ArgumentMapper
         include Sequel::Dataset::ArgumentMapper

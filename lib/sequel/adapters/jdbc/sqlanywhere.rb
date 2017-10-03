@@ -1,7 +1,7 @@
 # frozen-string-literal: true
 
-Sequel.require 'adapters/shared/sqlanywhere'
-Sequel.require 'adapters/jdbc/transactions'
+require_relative '../shared/sqlanywhere'
+require_relative 'transactions'
 
 module Sequel
   module JDBC
@@ -23,17 +23,9 @@ module Sequel
     Sequel.synchronize do
       DATABASE_SETUP[:sqlanywhere] = proc do |db|
         db.extend(Sequel::JDBC::SqlAnywhere::DatabaseMethods)
+        db.convert_smallint_to_bool = true
         db.dataset_class = Sequel::JDBC::SqlAnywhere::Dataset
         drv
-      end
-    end
-
-    # SEQUEL5: Remove
-    class Type_Convertor
-      def SqlAnywhereBoolean(r, i)
-        if v = Short(r, i)
-          v != 0
-        end
       end
     end
 
@@ -43,17 +35,13 @@ module Sequel
         v != 0 unless r.wasNull
       end
 
-      # Database instance methods for Sybase databases accessed via JDBC.
       module DatabaseMethods
         include Sequel::SqlAnywhere::DatabaseMethods
         include Sequel::JDBC::Transactions
 
-        LAST_INSERT_ID = 'SELECT @@IDENTITY'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :LAST_INSERT_ID)
-
         private
 
-        # Get the last inserted id.
+        # Use @@IDENTITY to get the last inserted id
         def last_insert_id(conn, opts=OPTS)
           statement(conn) do |stmt|
             sql = 'SELECT @@IDENTITY'
@@ -64,7 +52,6 @@ module Sequel
         end
       end
 
-      #Dataset class for Sybase datasets accessed via JDBC.
       class Dataset < JDBC::Dataset
         include Sequel::SqlAnywhere::DatasetMethods
 

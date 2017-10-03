@@ -19,7 +19,7 @@ module Sequel
     #
     # Then when you went to save an album that uses this plugin:
     #
-    #   Album.create(:name=>'abc')
+    #   Album.create(name: 'abc')
     #   # raises Sequel::ValidationFailed: name is shorter than 5 characters
     # 
     # Usage:
@@ -39,7 +39,7 @@ module Sequel
 
       # Automatically load the validation_helpers plugin to run the actual validations.
       def self.apply(model, opts=OPTS)
-        model.instance_eval do
+        model.instance_exec do
           plugin :validation_helpers
           @constraint_validations_table = DEFAULT_CONSTRAINT_VALIDATIONS_TABLE
           @constraint_validation_options = {}
@@ -56,7 +56,7 @@ module Sequel
       #                        :presence) and values should be hashes of options specific
       #                        to that validation type.
       def self.configure(model, opts=OPTS)
-        model.instance_eval do
+        model.instance_exec do
           if table = opts[:constraint_validations_table]
             @constraint_validations_table = table
           end
@@ -240,6 +240,7 @@ module Sequel
         def validate
           super
           model.constraint_validations.each do |v|
+            # Allow calling private validation methods
             send(*v)
           end
         end

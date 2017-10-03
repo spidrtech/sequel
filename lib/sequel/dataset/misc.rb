@@ -7,15 +7,6 @@ module Sequel
     # These methods don't fit cleanly into another section.
     # ---------------------
     
-    NOTIMPL_MSG = "This method must be overridden in Sequel adapters".freeze
-    Sequel::Deprecation.deprecate_constant(self, :NOTIMPL_MSG)
-    ARRAY_ACCESS_ERROR_MSG = 'You cannot call Dataset#[] with an integer or with no arguments.'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :ARRAY_ACCESS_ERROR_MSG)
-    ARG_BLOCK_ERROR_MSG = 'Must use either an argument or a block, not both'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :ARG_BLOCK_ERROR_MSG)
-    IMPORT_ERROR_MSG = 'Using Sequel::Dataset#import an empty column array is not allowed'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :IMPORT_ERROR_MSG)
-    
     # The database related to this dataset.  This is the Database instance that
     # will execute all of this dataset's queries.
     attr_reader :db
@@ -33,9 +24,9 @@ module Sequel
     # the Database#dataset method return an instance of that subclass.
     def initialize(db)
       @db = db
-      @opts = {} # OPTS # SEQUEL5
+      @opts = OPTS
       @cache = {}
-      # freeze # SEQUEL5
+      freeze
     end
 
     # Define a hash value such that datasets with the same class, DB, and opts
@@ -55,30 +46,16 @@ module Sequel
       self == o
     end
 
-    # SEQUEL5: Remove other dup methods
-    # def dup
-    #   self
-    # end
-    if TRUE_FREEZE
-      # Similar to #clone, but returns an unfrozen clone if the receiver is frozen.
-      def dup
-        _clone(:freeze=>false)
-      end
-    else
-      # :nocov:
-      def dup
-        c = clone
-        c.instance_variable_set(:@opts, Hash[c.opts])
-        c
-      end
-      # :nocov:
+    # Return self, as datasets are always frozen.
+    def dup
+      self
     end
     
     # Yield a dataset for each server in the connection pool that is tied to that server.
     # Intended for use in sharded environments where all servers need to be modified
     # with the same data:
     #
-    #   DB[:configs].where(:key=>'setting').each_server{|ds| ds.update(:value=>'new_value')}
+    #   DB[:configs].where(key: 'setting').each_server{|ds| ds.update(value: 'new_value')}
     def each_server
       db.servers.each{|s| yield server(s)}
     end
@@ -101,12 +78,11 @@ module Sequel
     else
       # :nocov:
       def freeze # :nodoc:
-        @opts.freeze # SEQUEL5: remove
         self
       end
 
       def frozen?  # :nodoc:
-        @opts.frozen? # SEQUEL5: true
+        true
       end
       # :nocov:
     end
@@ -122,7 +98,7 @@ module Sequel
     #   DB[:table].first_source_alias
     #   # => :table
     #
-    #   DB[:table___t].first_source_alias
+    #   DB[Sequel[:table].as(:t)].first_source_alias
     #   # => :t
     def first_source_alias
       source = @opts[:from]
@@ -147,7 +123,7 @@ module Sequel
     #   DB[:table].first_source_table
     #   # => :table
     #
-    #   DB[:table___t].first_source_table
+    #   DB[Sequel[:table].as(:t)].first_source_table
     #   # => :table
     def first_source_table
       source = @opts[:from]
@@ -215,7 +191,7 @@ module Sequel
     # SQL identifier that represents the unqualified column for the given value.
     # The given value should be a Symbol, SQL::Identifier, SQL::QualifiedIdentifier,
     # or SQL::AliasedExpression containing one of those.  In other cases, this
-    # returns nil
+    # returns nil.
     def unqualified_column_for(v)
       unless v.is_a?(String)
         _unqualified_column_for(v)
@@ -299,12 +275,11 @@ module Sequel
     private
 
     # Check the cache for the given key, returning the value.
-    # Otherwise, yield to get the dataset, and if the current dataset
-    # is frozen, cache the dataset under the given key.
+    # Otherwise, yield to get the dataset and cache the dataset under the given key.
     def cached_dataset(key)
       unless ds = cache_get(key)
         ds = yield
-        cache_set(key, ds) if frozen? # SEQUEL5: Remove if frozen?
+        cache_set(key, ds)
       end
 
       ds

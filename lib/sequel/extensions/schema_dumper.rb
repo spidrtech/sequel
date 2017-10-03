@@ -70,7 +70,7 @@ module Sequel
     end
 
     # Dump foreign key constraints for all tables as a migration. This complements
-    # the :foreign_keys=>false option to dump_schema_migration. This only dumps
+    # the foreign_keys: false option to dump_schema_migration. This only dumps
     # the constraints (not the columns) using alter_table/add_foreign_key with an
     # array of columns.
     #
@@ -81,14 +81,14 @@ module Sequel
       <<END_MIG
 Sequel.migration do
   change do
-#{ts.sort_by(&:to_s).map{|t| dump_table_foreign_keys(t)}.reject{|x| x == ''}.join("\n\n").gsub(/^/, '    ')}
+#{ts.sort.map{|t| dump_table_foreign_keys(t)}.reject{|x| x == ''}.join("\n\n").gsub(/^/, '    ')}
   end
 end
 END_MIG
     end
 
     # Dump indexes for all tables as a migration.  This complements
-    # the :indexes=>false option to dump_schema_migration. Options:
+    # the indexes: false option to dump_schema_migration. Options:
     # :same_db :: Create a dump for the same database type, so
     #             don't ignore errors if the index statements fail.
     # :index_names :: If set to false, don't record names of indexes. If
@@ -99,13 +99,13 @@ END_MIG
       <<END_MIG
 Sequel.migration do
   change do
-#{ts.sort_by(&:to_s).map{|t| dump_table_indexes(t, :add_index, options)}.reject{|x| x == ''}.join("\n\n").gsub(/^/, '    ')}
+#{ts.sort.map{|t| dump_table_indexes(t, :add_index, options)}.reject{|x| x == ''}.join("\n\n").gsub(/^/, '    ')}
   end
 end
 END_MIG
     end
 
-    # Return a string that contains a Sequel::Migration subclass that when
+    # Return a string that contains a Sequel migration that when
     # run would recreate the database structure. Options:
     # :same_db :: Don't attempt to translate database types to ruby types.
     #             If this isn't set to true, all database types will be translated to
@@ -132,7 +132,7 @@ END_MIG
         # Handle skipped foreign keys by adding them at the end via
         # alter_table/add_foreign_key.  Note that skipped foreign keys
         # probably result in a broken down migration.
-        sfka = sfk.sort_by{|table, fks| table.to_s}.map{|table, fks| dump_add_fk_constraints(table, fks.values)}
+        sfka = sfk.sort.map{|table, fks| dump_add_fk_constraints(table, fks.values)}
         sfka.join("\n\n").gsub(/^/, '    ') unless sfka.empty?
       end
 
@@ -225,7 +225,7 @@ END_MIG
       sfks = String.new
       sfks << "alter_table(#{table.inspect}) do\n"
       sfks << create_table_generator do
-        fks.sort_by{|fk| fk[:columns].map(&:to_s)}.each do |fk|
+        fks.sort_by{|fk| fk[:columns]}.each do |fk|
           foreign_key fk[:columns], fk
         end
       end.dump_constraints.gsub(/^foreign_key /, '  add_foreign_key ')
@@ -236,7 +236,7 @@ END_MIG
     # string that would add the foreign keys if run in a migration.
     def dump_table_foreign_keys(table, options=OPTS)
       if supports_foreign_key_parsing?
-        fks = foreign_key_list(table, options).sort_by{|fk| fk[:columns].map(&:to_s)}
+        fks = foreign_key_list(table, options).sort_by{|fk| fk[:columns]}
       end
 
       if fks.nil? || fks.empty?
@@ -256,7 +256,7 @@ END_MIG
       im = method(:index_to_generator_opts)
 
       if options[:indexes] != false && supports_index_parsing?
-        indexes = indexes(table).sort_by{|k,v| k.to_s}
+        indexes = indexes(table).sort
       end
 
       if options[:foreign_keys] != false && supports_foreign_key_parsing?
@@ -296,7 +296,7 @@ END_MIG
     # creating the index migration.
     def dump_table_indexes(table, meth, options=OPTS)
       if supports_index_parsing?
-        indexes = indexes(table).sort_by{|k,v| k.to_s}
+        indexes = indexes(table).sort
       else
         return ''
       end
@@ -335,7 +335,7 @@ END_MIG
         options[:skipped_foreign_keys] = skipped_foreign_keys
         tables
       else
-        tables.sort_by(&:to_s)
+        tables.sort
       end
     end
 
@@ -360,14 +360,14 @@ END_MIG
           # outstanding foreign keys and skipping those foreign keys.
           # The skipped foreign keys will be added at the end of the
           # migration.
-          skip_table, skip_fks = table_fks.sort_by{|table, fks| [fks.length, table.to_s]}.first
+          skip_table, skip_fks = table_fks.sort_by{|table, fks| [fks.length, table]}.first
           skip_fks_hash = skipped_foreign_keys[skip_table] = {}
           skip_fks.each{|fk| skip_fks_hash[fk[:columns]] = fk}
           this_loop << skip_table
         end
 
         # Add sorted tables from this loop to the final list
-        sorted_tables.concat(this_loop.sort_by(&:to_s))
+        sorted_tables.concat(this_loop.sort)
 
         # Remove tables that were handled this loop
         this_loop.each{|t| table_fks.delete(t)}

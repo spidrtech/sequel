@@ -1,24 +1,11 @@
 # frozen-string-literal: true
 
 require 'ibm_db'
-Sequel.require 'adapters/shared/db2'
+require_relative 'shared/db2'
 
 module Sequel
 
   module IBMDB
-    # SEQUEL5: Remove
-    @convert_smallint_to_bool = true
-    class << self
-      def convert_smallint_to_bool
-        Sequel::Deprecation.deprecate("Sequel::IBMDB.convert_smallint_to_bool", "Call this method on the Database instance")
-        @convert_smallint_to_bool
-      end
-      def convert_smallint_to_bool=(v)
-        Sequel::Deprecation.deprecate("Sequel::IBMDB.convert_smallint_to_bool=", "Call this method on the Database instance")
-        @convert_smallint_to_bool = v
-      end
-    end
-
     tt = Class.new do
       def boolean(s) !s.to_i.zero? end
       def int(s) s.to_i end
@@ -31,18 +18,14 @@ module Sequel
       :blob => ::Sequel::SQL::Blob.method(:new),
       :time => ::Sequel.method(:string_to_time),
       :date => ::Sequel.method(:string_to_date)
-    }#.freeze # SEQUEL5
+    }.freeze
 
-    # Wraps an underlying connection to DB2 using IBM_DB.
+    # Wraps an underlying connection to DB2 using IBM_DB, to provide a more
+    # rubyish API.
     class Connection
       # A hash with prepared statement name symbol keys, where each value is 
       # a two element array with an sql string and cached Statement value.
       attr_reader :prepared_statements
-
-      def prepared_statements=(v)
-        Sequel::Deprecation.deprecate("Sequel::IBMDB::Connection#prepared_statements=", "Use replace on the hash instead of reassigning it")
-        @prepared_statements = v
-      end
 
       # Error class for exceptions raised by the connection.
       class Error < StandardError
@@ -199,14 +182,7 @@ module Sequel
       attr_reader :conversion_procs
 
       # Whether to convert smallint values to bool for this Database instance
-      #attr_accessor :convert_smallint_to_bool # SEQUEL5
-
-      # SEQUEL5: Remove
-      attr_writer :convert_smallint_to_bool
-      def convert_smallint_to_bool
-        v = @convert_smallint_to_bool
-        v.nil? ? Sequel::IBMDB.instance_variable_get(:@convert_smallint_to_bool) : v
-      end
+      attr_accessor :convert_smallint_to_bool
     
       # Create a new connection object for the given server.
       def connect(server)
@@ -229,7 +205,6 @@ module Sequel
         Connection.new(connection_params)
       end
 
-      # Execute the given SQL on the database.
       def execute(sql, opts=OPTS, &block)
         if sql.is_a?(Symbol)
           execute_prepared_statement(sql, opts, &block)
@@ -240,8 +215,6 @@ module Sequel
         raise_error(e)
       end
 
-      # Execute the given SQL on the database, returning the last inserted
-      # identity value.
       def execute_insert(sql, opts=OPTS)
         synchronize(opts[:server]) do |c|
           if sql.is_a?(Symbol)
@@ -291,7 +264,8 @@ module Sequel
 
       private
 
-      # Execute the given SQL on the database.
+      # Execute the given SQL on the database, yielding the related statement if a block
+      # is given or returning the number of affected rows if not, and ensuring the statement is freed.
       def _execute(conn, sql, opts)
         stmt = log_connection_yield(sql, conn){conn.execute(sql)}
         if block_given?
@@ -304,7 +278,7 @@ module Sequel
       end
 
       def adapter_initialize
-        #@convert_smallint_to_bool = typecast_value_boolean(opts.fetch(:convert_smallint_to_bool, true)) # SEQUEL5
+        @convert_smallint_to_bool = typecast_value_boolean(opts.fetch(:convert_smallint_to_bool, true))
         @conversion_procs = DB2_TYPES.dup
         @conversion_procs[:timestamp] = method(:to_application_timestamp)
       end
@@ -381,9 +355,6 @@ module Sequel
     class Dataset < Sequel::Dataset
       include Sequel::DB2::DatasetMethods
 
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
-
       module CallableStatementMethods
         # Extend given dataset with this module so subselects inside subselects in
         # prepared statements work.
@@ -398,14 +369,8 @@ module Sequel
       
       PreparedStatementMethods = prepared_statements_module(:prepare_bind, Sequel::Dataset::UnnumberedArgumentMapper)
 
-      # Override the default IBMDB.convert_smallint_to_bool setting for this dataset.
-      def convert_smallint_to_bool=(v)
-        Sequel::Deprecation.deprecate("Sequel::IBMDB::Dataset#convert_smallint_to_bool=", "Call with_convert_smallint_to_bool instead, which returns a modified copy instead of modifying the object")
-        @opts[:convert_smallint_to_bool] = v
-      end
-
       # Whether to convert smallint to boolean arguments for this dataset.
-      # Defaults to the IBMDB module setting.
+      # Defaults to the Database setting.
       def convert_smallint_to_bool
         opts.has_key?(:convert_smallint_to_bool) ? opts[:convert_smallint_to_bool] : db.convert_smallint_to_bool
       end
@@ -415,7 +380,6 @@ module Sequel
         clone(:convert_smallint_to_bool=>v)
       end
 
-      # Fetch the rows from the database and yield plain hashes.
       def fetch_rows(sql)
         execute(sql) do |stmt|
           columns = []

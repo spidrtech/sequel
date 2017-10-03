@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 begin
   require 'active_support/duration'
@@ -6,8 +6,8 @@ begin
     require 'active_support/gem_version'
   rescue LoadError
   end
-rescue LoadError => exc
-  skip_warn "pg_interval plugin: can't load active_support/duration (#{exc.class}: #{exc})"
+rescue LoadError
+  warn "Skipping test of pg_interval plugin: can't load active_support/duration"
 else
 describe "pg_interval extension" do
   before do
@@ -32,16 +32,6 @@ describe "pg_interval extension" do
       @db.literal(ActiveSupport::Duration.new(0, [[:seconds, 2], [:seconds, 1]])).must_equal "'3 seconds '::interval"
       @db.literal(ActiveSupport::Duration.new(0, [[:seconds, 2], [:seconds, 1], [:days, 1], [:days, 4]])).must_equal "'5 days 3 seconds '::interval"
     end
-  end
-
-  deprecated "should set up conversion procs correctly" do
-    cp = Sequel::Postgres::PG__TYPES
-    cp[1186].call("1 sec").must_equal ActiveSupport::Duration.new(1, [[:seconds, 1]])
-  end
-
-  deprecated "should set up conversion procs for arrays correctly" do
-    cp = Sequel::Postgres::PG__TYPES
-    cp[1187].call("{1 sec}").must_equal [ActiveSupport::Duration.new(1, [[:seconds, 1]])]
   end
 
   it "should set up conversion procs correctly" do

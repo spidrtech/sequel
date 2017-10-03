@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "Sequel::Plugins::TacticalEagerLoading" do
   def sql_match(*args)
@@ -75,11 +75,6 @@ describe "Sequel::Plugins::TacticalEagerLoading" do
   it "association getter methods should not eagerly load the association if a callback proc is given" do
     ts.map{|x| x.parent(:callback=>proc{|ds| ds})}.must_equal [ts[2], ts[3], nil, nil]
     sql_match('SELECT * FROM t WHERE (t.id = 101) LIMIT 1', 'SELECT * FROM t WHERE (t.id = 102) LIMIT 1')
-  end
-
-  deprecated "association getter methods should not eagerly load the association if true is passed" do
-    ts.map{|x| x.parent(true)}.must_equal [ts[2], ts[3], nil, nil]
-    sql_match('SELECT * FROM t WHERE id = 101', 'SELECT * FROM t WHERE id = 102')
   end
 
   it "association getter methods should not eagerly load the association if :reload=>true is passed" do

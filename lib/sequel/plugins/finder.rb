@@ -7,7 +7,7 @@ module Sequel
     # that represents a model class method that returns a dataset:
     #
     #   def Artist.by_name(name)
-    #     where(:name=>name)
+    #     where(name: name)
     #   end
     #
     #   Artist.finder :by_name
@@ -18,7 +18,7 @@ module Sequel
     #
     # The alternative way to use this to pass your own block:
     #
-    #   Artist.finder(:name=>:first_by_name){|pl, ds| ds.where(:name=>pl.arg).limit(1)}
+    #   Artist.finder(name: :first_by_name){|pl, ds| ds.where(name: pl.arg).limit(1)}
     #
     # Additionally, there is a Model.prepared_finder method.  This works similarly
     # to Model.finder, but uses a prepared statement.  This limits the types of
@@ -50,7 +50,7 @@ module Sequel
         # that represents a model class method that returns a dataset:
         #
         #   def Artist.by_name(name)
-        #     where(:name=>name)
+        #     where(name: name)
         #   end
         #
         #   Artist.finder :by_name
@@ -61,7 +61,7 @@ module Sequel
         #
         # The alternative way to use this to pass your own block:
         #
-        #   Artist.finder(:name=>:first_by_name){|pl, ds| ds.where(:name=>pl.arg).limit(1)}
+        #   Artist.finder(name: :first_by_name){|pl, ds| ds.where(name: pl.arg).limit(1)}
         #
         # Note that if you pass your own block, you are responsible for manually setting
         # limits if necessary (as shown above).
@@ -86,7 +86,7 @@ module Sequel
         # This doesn't handle all possible cases.  For example, if you have a method such as:
         #
         #   def Artist.by_name(name)
-        #     name ? where(:name=>name) : exclude(:name=>nil)
+        #     name ? where(name: name) : exclude(name: nil)
         #   end
         #
         # Then calling a finder without an argument will not work as you expect.
@@ -128,7 +128,7 @@ module Sequel
               ds = if block
                 model.instance_exec(*args, &block)
               else
-                model.send(meth, *args)
+                model.public_send(meth, *args)
               end
               ds = ds.limit(1) if limit1
               model_name = model.name
@@ -144,7 +144,7 @@ module Sequel
               n = argn.call(model)
               block ||= lambda do |pl, model2|
                 args = (0...n).map{pl.arg}
-                ds = model2.send(meth, *args)
+                ds = model2.public_send(meth, *args)
                 ds = ds.limit(1) if limit1
                 ds
               end
@@ -154,7 +154,7 @@ module Sequel
           end
 
           @finder_loaders[meth_name] = loader_proc
-          mod = opts[:mod] || (class << self; self; end)
+          mod = opts[:mod] || singleton_class
           if prepare
             def_prepare_method(mod, meth_name)
           else
@@ -190,14 +190,14 @@ module Sequel
           finder(meth, opts, &block)
         end
 
-        Plugins.inherited_instance_variables(self, :@finders=>:dup, :@autoreloading_associations=>:hash_dup, :@default_association_options=>:dup, :@cache_associations=>nil, :@default_eager_limit_strategy=>nil)
+        Plugins.inherited_instance_variables(self, :@finders=>:dup, :@finder_loaders=>:dup)
 
         private
 
         # Define a finder method in the given module with the given method name that
         # load rows using the finder with the given name.
         def def_finder_method(mod, meth, type)
-          mod.send(:define_method, meth){|*args, &block| finder_for(meth).send(type, *args, &block)}
+          mod.send(:define_method, meth){|*args, &block| finder_for(meth).public_send(type, *args, &block)}
         end
 
         # Define a prepared_finder method in the given module that will call the associated prepared
@@ -233,6 +233,12 @@ module Sequel
             base = base.next
             s
           end
+        end
+
+        # Clear any finders when reseting the instance dataset
+        def reset_instance_dataset
+          Sequel.synchronize{@finders.clear} if @finders && !@finders.frozen?
+          super
         end
       end
     end

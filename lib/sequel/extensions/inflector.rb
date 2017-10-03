@@ -95,8 +95,8 @@ class String
       (@uncountables << words).flatten!
     end
 
-    Sequel.require('default_inflections', 'model')
-    instance_eval(&Sequel::DEFAULT_INFLECTIONS_PROC)
+    require_relative '../model/default_inflections'
+    instance_exec(&Sequel::DEFAULT_INFLECTIONS_PROC)
   end
 
   # Yield the Inflections module if a block is given, and return
@@ -151,7 +151,7 @@ class String
   # Example
   #   "puni_puni".dasherize #=> "puni-puni"
   def dasherize
-    gsub(/_/, '-')
+    gsub('_', '-')
   end
 
   # Removes the module part from the expression in the string
@@ -181,7 +181,7 @@ class String
   #   "employee_salary" #=> "Employee salary"
   #   "author_id" #=> "Author"
   def humanize
-    gsub(/_id$/, "").gsub(/_/, " ").capitalize
+    gsub(/_id$/, "").gsub('_', " ").capitalize
   end
 
   # Returns the plural form of the word in the string.

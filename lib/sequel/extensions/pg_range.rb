@@ -70,97 +70,13 @@
 #
 # Related module: Sequel::Postgres::PGRange
 
-Sequel.require 'adapters/shared/postgres'
-
 module Sequel
   module Postgres
     class PGRange
       include Sequel::SQL::AliasMethods
 
-      # SEQUEL5: Remove
-      RANGE_TYPES = {}
-
-      EMPTY = 'empty'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY)
-      EMPTY_STRING = ''.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY_STRING)
-      COMMA = ','.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA)
-      QUOTED_EMPTY_STRING = '""'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :QUOTED_EMPTY_STRING)
-      OPEN_PAREN = "(".freeze
-      Sequel::Deprecation.deprecate_constant(self, :OPEN_PAREN)
-      CLOSE_PAREN = ")".freeze
-      Sequel::Deprecation.deprecate_constant(self, :CLOSE_PAREN)
-      OPEN_BRACKET = "[".freeze
-      Sequel::Deprecation.deprecate_constant(self, :OPEN_BRACKET)
-      CLOSE_BRACKET = "]".freeze
-      Sequel::Deprecation.deprecate_constant(self, :CLOSE_BRACKET)
-      ESCAPE_RE = /("|,|\\|\[|\]|\(|\))/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ESCAPE_RE)
-      ESCAPE_REPLACE = '\\\\\1'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ESCAPE_REPLACE)
-      CAST = '::'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CAST)
-
-      # SEQUEL5: Remove
-      def self.register(db_type, opts=OPTS, &block)
-        Sequel::Deprecation.deprecate("Sequel::Postgres::PGRange.register", "Use Database#register_range_type on a Database instance using the pg_range extension") unless opts[:skip_deprecation_warning]
-        db_type = db_type.to_s.dup.freeze
-
-        type_procs = opts[:type_procs] || PG__TYPES
-        mod = opts[:typecast_methods_module] || DatabaseMethods
-        typecast_method_map = opts[:typecast_method_map] || RANGE_TYPES
-
-        if converter = opts[:converter]
-          raise Error, "can't provide both a block and :converter option to register" if block
-        else
-          converter = block
-        end
-
-        if soid = opts[:subtype_oid]
-          raise Error, "can't provide both a converter and :subtype_oid option to register" if converter 
-          raise Error, "no conversion proc for :subtype_oid=>#{soid.inspect} in PG_TYPES" unless converter = type_procs[soid]
-        end
-
-        parser = Parser.new(db_type, converter)
-
-        typecast_method_map[db_type] = db_type.to_sym
-
-        define_range_typecast_method(mod, db_type, parser)
-
-        if oid = opts[:oid]
-          if opts[:skip_deprecation_warning]
-            def parser.call(s)
-              Sequel::Deprecation.deprecate("Conversion proc for #{db_type} added globally by pg_range extension", "Load the pg_range extension into the Database instance")
-              super
-            end
-          end
-          type_procs[oid] = parser
-        end
-
-        nil
-      end
-
-      # SEQUEL5: Remove
-      def self.define_range_typecast_method(mod, type, parser)
-        mod.class_eval do
-          meth = :"typecast_value_#{type}"
-          define_method(meth){|v| typecast_value_pg_range(v, parser)}
-          private meth
-        end
-      end
-      private_class_method :define_range_typecast_method
-
       # Creates callable objects that convert strings into PGRange instances.
       class Parser
-        PARSER = /\A(\[|\()("((?:\\"|[^"])*)"|[^"]*),("((?:\\"|[^"])*)"|[^"]*)(\]|\))\z/
-        Sequel::Deprecation.deprecate_constant(self, :PARSER)
-        REPLACE_RE = /\\(.)/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :REPLACE_RE)
-        REPLACE_WITH = '\1'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :REPLACE_WITH)
-
         # The database range type for this parser (e.g. 'int4range'),
         # automatically setting the db_type for the returned PGRange instances.
         attr_reader :db_type
@@ -215,10 +131,10 @@ module Sequel
       end
 
       module DatabaseMethods
-        # Reset the conversion procs if using the native postgres adapter,
+        # Add the conversion procs to the database
         # and extend the datasets to correctly literalize ruby Range values.
         def self.extended(db)
-          db.instance_eval do
+          db.instance_exec do
             @pg_range_schema_types ||= {}
             extend_datasets(DatasetMethods)
             register_range_type('int4range', :oid=>3904, :subtype_oid=>23)
@@ -315,14 +231,13 @@ module Sequel
 
           @pg_range_schema_types[db_type] = db_type.to_sym
 
-          (class << self; self end).class_eval do
+          singleton_class.class_eval do
             meth = :"typecast_value_#{db_type}"
             define_method(meth){|v| typecast_value_pg_range(v, parser)}
             private meth
           end
 
           @schema_type_classes[:"#{opts[:type_symbol] || db_type}"] = PGRange
-          conversion_procs_updated # SEQUEL5: Remove
           nil
         end
 
@@ -338,23 +253,9 @@ module Sequel
           end
         end
 
-        # SEQUEL5: Remove
-        def get_conversion_procs
-          procs = super
-
-          procs[3908] = Parser.new("tsrange", procs[1114])
-          procs[3910] = Parser.new("tstzrange", procs[1184])
-          if defined?(PGArray::Creator)
-            procs[3909] = PGArray::Creator.new("tsrange", procs[3908])
-            procs[3911] = PGArray::Creator.new("tstzrange", procs[3910])
-          end
-
-          procs
-        end
-
         # Recognize the registered database range types.
         def schema_column_type(db_type)
-          if type = @pg_range_schema_types[db_type] || RANGE_TYPES[db_type] # SEQUEL5: Remove || RANGE_TYPES[db_type]
+          if type = @pg_range_schema_types[db_type]
             type
           else
             super
@@ -451,9 +352,9 @@ module Sequel
       def cover?(value)
         return false if empty?
         b = self.begin
-        return false if b && b.send(exclude_begin? ? :>= : :>, value)
+        return false if b && b.public_send(exclude_begin? ? :>= : :>, value)
         e = self.end
-        return false if e && e.send(exclude_end? ? :<= : :<, value)
+        return false if e && e.public_send(exclude_end? ? :<= : :<, value)
         true
       end
 
@@ -600,22 +501,6 @@ module Sequel
           ds.literal(k).gsub(/("|,|\\|\[|\]|\(|\))/, '\\\\\1')
         end
       end
-    end
-
-    # SEQUEL5: Remove
-    PGRange.register('int4range', :oid=>3904, :subtype_oid=>23, :skip_deprecation_warning=>true)
-    PGRange.register('numrange', :oid=>3906, :subtype_oid=>1700, :skip_deprecation_warning=>true)
-    PGRange.register('tsrange', :oid=>3908, :subtype_oid=>1114, :skip_deprecation_warning=>true)
-    PGRange.register('tstzrange', :oid=>3910, :subtype_oid=>1184, :skip_deprecation_warning=>true)
-    PGRange.register('daterange', :oid=>3912, :subtype_oid=>1082, :skip_deprecation_warning=>true)
-    PGRange.register('int8range', :oid=>3926, :subtype_oid=>20, :skip_deprecation_warning=>true)
-    if defined?(PGArray) && PGArray.respond_to?(:register)
-      PGArray.register('int4range', :oid=>3905, :scalar_oid=>3904, :scalar_typecast=>:int4range, :skip_deprecation_warning=>true)
-      PGArray.register('numrange', :oid=>3907, :scalar_oid=>3906, :scalar_typecast=>:numrange, :skip_deprecation_warning=>true)
-      PGArray.register('tsrange', :oid=>3909, :scalar_oid=>3908, :scalar_typecast=>:tsrange, :skip_deprecation_warning=>true)
-      PGArray.register('tstzrange', :oid=>3911, :scalar_oid=>3910, :scalar_typecast=>:tstzrange, :skip_deprecation_warning=>true)
-      PGArray.register('daterange', :oid=>3913, :scalar_oid=>3912, :scalar_typecast=>:daterange, :skip_deprecation_warning=>true)
-      PGArray.register('int8range', :oid=>3927, :scalar_oid=>3926, :scalar_typecast=>:int8range, :skip_deprecation_warning=>true)
     end
   end
 

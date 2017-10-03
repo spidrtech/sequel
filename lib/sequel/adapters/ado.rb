@@ -61,14 +61,8 @@ module Sequel
       Sequel.blob(v.pack('c*'))
     end
 
-    if RUBY_VERSION >= '1.9'
-      def cp.date(v)
-        Date.new(v.year, v.month, v.day)
-      end
-    else
-      def cp.date(v)
-        Date.new(*v[0...10].split('/').map{|x| x.to_i})
-      end
+    def cp.date(v)
+      Date.new(v.year, v.month, v.day)
     end
 
     CONVERSION_PROCS = {}
@@ -83,12 +77,9 @@ module Sequel
         CONVERSION_PROCS[i] = method
       end
     end
-    # CONVERSION_PROCS.freeze # SEQUEL5
+    CONVERSION_PROCS.freeze
 
     class Database < Sequel::Database
-      DISCONNECT_ERROR_RE = /Communication link failure/
-      Sequel::Deprecation.deprecate_constant(self, :DISCONNECT_ERROR_RE)
-
       set_adapter_scheme :ado
 
       attr_reader :conversion_procs
@@ -99,7 +90,6 @@ module Sequel
       # :command_timeout :: Sets the time in seconds to wait while attempting
       #                     to execute a command before cancelling the attempt and generating
       #                     an error. Specifically, it sets the ADO CommandTimeout property.
-      #                     If this property is not set, the default of 30 seconds is used.
       # :driver :: The driver to use in the ADO connection string.  If not provided, a default
       #            of "SQL Server" is used.
       # :conn_string :: The full ADO connection string.  If this is provided,
@@ -111,8 +101,8 @@ module Sequel
       #
       # Pay special attention to the :provider option, as without specifying a provider,
       # many things will be broken.  The SQLNCLI10 provider appears to work well if you
-      # are connecting to Microsoft SQL Server, but it is not the default as that would
-      # break backwards compatability.
+      # are connecting to Microsoft SQL Server, but it is not the default as that is not
+      # always available and would break backwards compatability.
       def connect(server)
         opts = server_opts(server)
         s = opts[:conn_string] || "driver=#{opts[:driver]};server=#{opts[:host]};database=#{opts[:database]}#{";uid=#{opts[:user]};pwd=#{opts[:password]}" if opts[:user]}"
@@ -184,14 +174,14 @@ module Sequel
       def adapter_initialize
         case @opts[:conn_string]
         when /Microsoft\.(Jet|ACE)\.OLEDB/io
-          Sequel.require 'adapters/ado/access'
+          require_relative 'ado/access'
           extend Sequel::ADO::Access::DatabaseMethods
           self.dataset_class = ADO::Access::Dataset
         else
           @opts[:driver] ||= 'SQL Server'
           case @opts[:driver]
           when 'SQL Server'
-            Sequel.require 'adapters/ado/mssql'
+            require_relative 'ado/mssql'
             extend Sequel::ADO::MSSQL::DatabaseMethods
             self.dataset_class = ADO::MSSQL::Dataset
             set_mssql_unicode_strings
@@ -232,9 +222,6 @@ module Sequel
     end
     
     class Dataset < Sequel::Dataset
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
-
       def fetch_rows(sql)
         execute(sql) do |recordset|
           cols = []
@@ -245,7 +232,7 @@ module Sequel
           recordset.Fields.each do |field|
             type = field.Type
             cp = if type == AdDBTimeStamp
-              ts_cp ||= if RUBY_VERSION >= '1.9'
+              ts_cp ||= begin
                 nsec_div = 1000000000.0/(10**(timestamp_precision))
                 nsec_mul = 10**(timestamp_precision+3)
                 meth = db.method(:to_application_timestamp)
@@ -253,9 +240,6 @@ module Sequel
                   # Fractional second handling is not correct on ruby <2.2
                   meth.call([v.year, v.month, v.day, v.hour, v.min, v.sec, (v.nsec/nsec_div).round * nsec_mul])
                 end
-              else
-                # Ruby 1.8 returns AdDBTimeStamp values as a string
-                db.method(:to_application_timestamp)
               end
             else
               conversion_procs[type]
@@ -282,7 +266,7 @@ module Sequel
         end
       end
       
-      # ADO returns nil for all for delete and update statements.
+      # ADO can return for for delete and update statements, depending on the provider.
       def provides_accurate_rows_matched?
         false
       end

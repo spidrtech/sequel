@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "Sequel::Plugins::ColumnSelect" do
   def set_cols(*cols)
@@ -63,13 +63,13 @@ describe "Sequel::Plugins::ColumnSelect" do
     @Album.dataset.sql.must_equal 'SELECT name, artist FROM albums'
   end
 
-  deprecated "should not add a explicit column selection on existing dataset with multiple tables" do
+  it "should work with implicit subqueries used for joined datasets" do
     @Album.dataset = @Album.db.from(:a1, :a2)
     @Album.plugin :column_select
-    @Album.dataset.sql.must_equal 'SELECT * FROM a1, a2'
+    @Album.dataset.sql.must_equal "SELECT a1.id, a1.a, a1.b, a1.c FROM (SELECT * FROM a1, a2) AS a1"
 
     @Album.dataset = @Album.db.from(:a1).cross_join(:a2)
-    @Album.dataset.sql.must_equal 'SELECT * FROM a1 CROSS JOIN a2'
+    @Album.dataset.sql.must_equal "SELECT a1.id, a1.a, a1.b, a1.c FROM (SELECT * FROM a1 CROSS JOIN a2) AS a1"
   end
 
   it "should add a explicit column selection on existing dataset with a subquery" do

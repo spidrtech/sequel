@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "Sequel::Dataset::ImplicitSubquery" do
   it "should implicitly use a subquery for most dataset query methods" do
@@ -9,10 +9,6 @@ describe "Sequel::Dataset::ImplicitSubquery" do
     ods = db[:c]
     ods.columns(:id, :b)
 
-    deprecated do
-      ds.and(:c).sql.must_equal "SELECT * FROM (SELECT * FROM table) AS t1 WHERE c"
-      ds.exclude_where(:c).sql.must_equal "SELECT * FROM (SELECT * FROM table) AS t1 WHERE NOT c"
-    end
     ds.cross_join(:c).sql.must_equal "SELECT * FROM (SELECT * FROM table) AS t1 CROSS JOIN c"
     ds.distinct.sql.must_equal "SELECT DISTINCT * FROM (SELECT * FROM table) AS t1"
     ds.except(ods).sql.must_equal "SELECT * FROM (SELECT * FROM (SELECT * FROM table) AS t1 EXCEPT SELECT * FROM c) AS t1"

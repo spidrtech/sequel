@@ -1,6 +1,6 @@
 # frozen-string-literal: true
 
-Sequel.require %w'adapters/utils/unmodified_identifiers'
+require_relative '../utils/unmodified_identifiers'
 
 module Sequel
   # Top level module for holding all PostgreSQL-related modules and classes
@@ -23,17 +23,6 @@ module Sequel
     PLUS_INFINITY   = 1.0/0.0
     MINUS_INFINITY  = -1.0/0.0
 
-    NAN_STR             = 'NaN'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :NAN_STR)
-    PLUS_INFINITY_STR   = 'Infinity'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :PLUS_INFINITY_STR)
-    MINUS_INFINITY_STR  = '-Infinity'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :MINUS_INFINITY_STR)
-    TRUE_STR = 't'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :TRUE_STR)
-    DASH_STR = '-'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :DASH_STR)
-    
     TYPE_TRANSLATOR = tt = Class.new do
       def boolean(s) s == 't' end
       def integer(s) s.to_i end
@@ -62,24 +51,9 @@ module Sequel
         end
         ::Sequel::SQL::Blob.new(str)
       end
-    end.new#.freeze # SEQUEL5
+    end.new.freeze
 
-    # Type OIDs for string types used by PostgreSQL.  These types don't
-    # have conversion procs associated with them (since the data is
-    # already in the form of a string).
-    STRING_TYPES = [18, 19, 25, 1042, 1043] # SEQUEL5: Remove
-
-    # Hash with type name strings/symbols and callable values for converting PostgreSQL types.
-    # Non-builtin types that don't have fixed numbers should use this to register
-    # conversion procs.
-    PG_NAMED_TYPES = {} unless defined?(PG_NAMED_TYPES)
-    PG_NAMED__TYPES = PG_NAMED_TYPES
-    Sequel::Deprecation.deprecate_constant(self, :PG_NAMED_TYPES)
-
-    # Hash with integer keys and callable values for converting PostgreSQL types.
-    PG_TYPES = {} unless defined?(PG_TYPES)
-
-    #CONVERSION_PROCS = {} # SEQUEL5
+    CONVERSION_PROCS = {}
 
     {
       [16] => tt.method(:boolean),
@@ -92,14 +66,10 @@ module Sequel
       [1184, 1114] => ::Sequel.method(:database_to_application_timestamp),
     }.each do |k,v|
       k.each do |n|
-        PG_TYPES[n] = v
-        #CONVERSION_PROCS[n] = v # SEQUEL5
+        CONVERSION_PROCS[n] = v
       end
     end
-    PG__TYPES = PG_TYPES
-    Sequel::Deprecation.deprecate_constant(self, :PG_TYPES)
-
-    #CONVERSION_PROCS.freeze # SEQUEL5
+    CONVERSION_PROCS.freeze
 
     module MockAdapterDatabaseMethods
       def bound_variable_arg(arg, conn)
@@ -112,36 +82,10 @@ module Sequel
     end
 
     def self.mock_adapter_setup(db)
-      db.instance_eval do
+      db.instance_exec do
         @server_version = 90500
         initialize_postgres_adapter
         extend(MockAdapterDatabaseMethods)
-      end
-    end
-
-    CONVERTED_EXCEPTIONS = []
-    Sequel::Deprecation.deprecate_constant(self, :CONVERTED_EXCEPTIONS)
-
-    # SEQUEL5: Remove
-    @client_min_messages = :warning
-    @force_standard_strings = true
-    class << self
-      def client_min_messages
-        Sequel::Deprecation.deprecate("Sequel::Postgres.client_min_messages", "Use the :client_min_messages Database option instead")
-        @client_min_messages
-      end
-      def client_min_messages=(v)
-        Sequel::Deprecation.deprecate("Sequel::Postgres.client_min_messages=", "Use the :client_min_messages Database option instead")
-        @client_min_messages = v
-      end
-
-      def force_standard_strings
-        Sequel::Deprecation.deprecate("Sequel::Postgres.force_standard_strings", "Use the :force_standard_strings Database option instead")
-        @force_standard_strings
-      end
-      def force_standard_strings=(v)
-        Sequel::Deprecation.deprecate("Sequel::Postgres.force_standard_strings=", "Use the :force_standard_strings Database option instead")
-        @force_standard_strings = v
       end
     end
 
@@ -185,21 +129,13 @@ module Sequel
     # Error raised when Sequel determines a PostgreSQL exclusion constraint has been violated.
     class ExclusionConstraintViolation < Sequel::ConstraintViolation; end
 
-    # Methods shared by Database instances that connect to PostgreSQL.
     module DatabaseMethods
       include UnmodifiedIdentifiers::DatabaseMethods
-
-      RE_CURRVAL_ERROR = /currval of sequence "(.*)" is not yet defined in this session|relation "(.*)" does not exist/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :RE_CURRVAL_ERROR)
-      POSTGRES_DEFAULT_RE = /\A(?:B?('.*')::[^']+|\((-?\d+(?:\.\d+)?)\))\z/
-      Sequel::Deprecation.deprecate_constant(self, :POSTGRES_DEFAULT_RE)
-      UNLOGGED = 'UNLOGGED '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :UNLOGGED)
 
       PREPARED_ARG_PLACEHOLDER = LiteralString.new('$').freeze
       FOREIGN_KEY_LIST_ON_DELETE_MAP = {'a'=>:no_action, 'r'=>:restrict, 'c'=>:cascade, 'n'=>:set_null, 'd'=>:set_default}.freeze
       ON_COMMIT = {:drop => 'DROP', :delete_rows => 'DELETE ROWS', :preserve_rows => 'PRESERVE ROWS'}.freeze
-      #ON_COMMIT.each_value(&:freeze) # SEQUEL5
+      ON_COMMIT.each_value(&:freeze)
 
       # SQL fragment for custom sequences (ones not created by serial primary key),
       # Returning the schema and literal form of the sequence name, by parsing
@@ -263,27 +199,17 @@ module Sequel
         conversion_procs[oid] = callable
       end
 
-      # Add a conversion proc for a named type.  This should be used 
-      # for types without fixed OIDs, which includes all types that
-      # are not included in a default PostgreSQL installation.  If 
-      # a block is given, it is used as the conversion proc, otherwise
-      # the conversion proc is looked up in the PG_NAMED_TYPES hash.
+      # Add a conversion proc for a named type, using the given block.
+      # This should be used for types without fixed OIDs, which includes all types that
+      # are not included in a default PostgreSQL installation.
       def add_named_conversion_proc(name, &block)
-        unless block
-          if block = PG_NAMED__TYPES[name]
-            Sequel::Deprecation.deprecate("Sequel::PG_NAMED_TYPES", "Call Database#add_named_conversion_proc directly for each database you want to support the #{name} type")
-          end
+        name = name.to_s if name.is_a?(Symbol)
+        unless oid = from(:pg_type).where(:typtype=>['b', 'e'], :typname=>name.to_s).get(:oid)
+          raise Error, "No matching type in pg_type for #{name.inspect}"
         end
-        add_named_conversion_procs(conversion_procs, name=>block) # SEQUEL5: Remove
-        # SEQUEL5:
-        #unless oid = from(:pg_type).where(:typtype=>['b', 'e'], :typname=>name.to_s).get(:oid)
-        #  raise Error, "No matching type in pg_type for #{name.inspect}"
-        #end
-        #add_conversion_proc(oid, block) # SEQUEL5
+        add_conversion_proc(oid, block)
       end
 
-      # Commit an existing prepared transaction with the given transaction
-      # identifier string.
       def commit_prepared_transaction(transaction_id, opts=OPTS)
         run("COMMIT PREPARED #{literal(transaction_id)}", opts)
       end
@@ -347,7 +273,6 @@ module Sequel
         self << create_trigger_sql(table, name, function, opts)
       end
 
-      # PostgreSQL uses the :postgres database type.
       def database_type
         :postgres
       end
@@ -575,14 +500,6 @@ module Sequel
         run "REFRESH MATERIALIZED VIEW#{' CONCURRENTLY' if opts[:concurrently]} #{quote_schema_table(name)}"
       end
       
-      # SEQUEL5: Remove
-      def reset_conversion_procs
-        Sequel::Deprecation.deprecate('Database#reset_conversion_procs', 'There should no longer be a need to reset conversion procs')
-        @conversion_procs = get_conversion_procs
-        conversion_procs_updated
-        @conversion_procs
-      end
-
       # Reset the primary key sequence for the given table, basing it on the
       # maximum current value of the table's primary key.
       def reset_primary_key_sequence(table)
@@ -595,8 +512,6 @@ module Sequel
         get{setval(seq, db[table].select{coalesce(max(pk)+seq_ds.select{:increment_by}, seq_ds.select(:min_value))}, false)}
       end
 
-      # Rollback an existing prepared transaction with the given transaction
-      # identifier string.
       def rollback_prepared_transaction(transaction_id, opts=OPTS)
         run("ROLLBACK PREPARED #{literal(transaction_id)}", opts)
       end
@@ -620,7 +535,6 @@ module Sequel
             0
           end
         end
-        Sequel::Deprecation.deprecate('Sequel no longer supports PostgreSQL <8.2, some things may not work.') if @server_version < 80200
         @server_version
       end
 
@@ -700,10 +614,10 @@ module Sequel
       # Creates a dataset that uses the VALUES clause:
       #
       #   DB.values([[1, 2], [3, 4]])
-      #   VALUES ((1, 2), (3, 4))
+      #   # VALUES ((1, 2), (3, 4))
       #
       #   DB.values([[1, 2], [3, 4]]).order(:column2).limit(1, 1)
-      #   VALUES ((1, 2), (3, 4)) ORDER BY column2 LIMIT 1 OFFSET 1
+      #   # VALUES ((1, 2), (3, 4)) ORDER BY column2 LIMIT 1 OFFSET 1
       def values(v)
         @default_dataset.clone(:values=>v)
       end
@@ -723,21 +637,10 @@ module Sequel
 
       private
 
-      # SEQUEL5: Remove
-      def add_named_conversion_procs(procs, named_procs)
-        unless (named_procs).empty?
-          convert_named_procs_to_procs(named_procs).each do |oid, pr|
-            procs[oid] ||= pr
-          end
-          conversion_procs_updated
-        end
-      end
-
       def alter_table_add_column_sql(table, op)
         "ADD COLUMN#{' IF NOT EXISTS' if op[:if_not_exists]} #{column_definition_sql(op)}"
       end
 
-      # Use a PostgreSQL-specific alter table generator
       def alter_table_generator_class
         Postgres::AlterTableGenerator
       end
@@ -821,14 +724,14 @@ module Sequel
         (super || op[:op] == :validate_constraint) && op[:op] != :rename_column
       end
 
-      VALID_CLIENT_MIN_MESSAGES = %w'DEBUG5 DEBUG4 DEBUG3 DEBUG2 DEBUG1 LOG NOTICE WARNING ERROR FATAL PANIC'.freeze
+      VALID_CLIENT_MIN_MESSAGES = %w'DEBUG5 DEBUG4 DEBUG3 DEBUG2 DEBUG1 LOG NOTICE WARNING ERROR FATAL PANIC'.freeze.each(&:freeze)
       # The SQL queries to execute when starting a new connection.
       def connection_configuration_sqls
         sqls = []
 
-        sqls << "SET standard_conforming_strings = ON" if typecast_value_boolean(@opts.fetch(:force_standard_strings, Postgres.instance_variable_get(:@force_standard_strings))) # , true)) # SEQUEL5
+        sqls << "SET standard_conforming_strings = ON" if typecast_value_boolean(@opts.fetch(:force_standard_strings, true))
 
-        cmm = @opts.fetch(:client_min_messages, Postgres.instance_variable_get(:@client_min_messages)) # , :warning) # SEQUEL5
+        cmm = @opts.fetch(:client_min_messages, :warning)
         if cmm && !cmm.to_s.empty?
           cmm = cmm.to_s.upcase.strip
           unless VALID_CLIENT_MIN_MESSAGES.include?(cmm)
@@ -872,34 +775,6 @@ module Sequel
         end
       end
 
-      # SEQUEL5: Remove
-      def conversion_procs_updated
-        nil
-      end
-
-      # SEQUEL5: Remove
-      def convert_named_procs_to_procs(named_procs)
-        h = {}
-        from(:pg_type).where(:typtype=>['b', 'e'], :typname=>named_procs.keys.map(&:to_s)).select_map([:oid, :typname]).each do |oid, name|
-          h[oid.to_i] = named_procs[name.untaint.to_sym]
-        end
-        h
-      end
-
-      # SEQUEL5: Remove
-      def copy_conversion_procs(oids)
-        Sequel::Deprecation.deprecate("Database#copy_conversion_procs", "There is no reason to use this anymore")
-        procs = conversion_procs
-        oids.each do |oid|
-          procs[oid] = PG__TYPES[oid]
-        end
-        conversion_procs_updated
-      end
-
-      EXCLUSION_CONSTRAINT_SQL_STATE = '23P01'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXCLUSION_CONSTRAINT_SQL_STATE)
-      DEADLOCK_SQL_STATE = '40P01'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DEADLOCK_SQL_STATE)
       def database_specific_error_class_from_sqlstate(sqlstate)
         if sqlstate == '23P01'
           ExclusionConstraintViolation
@@ -1041,7 +916,6 @@ module Sequel
         result += " AS #{sql}"
       end
 
-      # Use a PostgreSQL-specific create table generator
       def create_table_generator_class
         Postgres::CreateTableGenerator
       end
@@ -1098,8 +972,8 @@ module Sequel
         "DROP #{'MATERIALIZED ' if opts[:materialized]}VIEW#{' IF EXISTS' if opts[:if_exists]} #{quote_schema_table(name)}#{' CASCADE' if opts[:cascade]}"
       end
 
-      # If opts includes a :schema option, or a default schema is used, restrict the dataset to
-      # that schema.  Otherwise, just exclude the default PostgreSQL schemas except for public.
+      # If opts includes a :schema option, use it, otherwise restrict the filter to only the
+      # currently visible schemas.
       def filter_schema(ds, opts)
         expr = if schema = opts[:schema]
           schema.to_s
@@ -1109,18 +983,6 @@ module Sequel
         ds.where{{pg_namespace[:nspname]=>expr}}
       end
 
-      # SEQUEL5: Remove
-      def get_conversion_procs
-        procs = PG__TYPES.dup
-        procs[1184] = procs[1114] = method(:to_application_timestamp)
-        unless PG_NAMED__TYPES.empty?
-          Sequel::Deprecation.deprecate("Sequel::PG_NAMED_TYPES", "Call Database#add_named_conversion_proc directly for each Database instance where you want to support the following type(s): #{PG_NAMED__TYPES.keys.join(', ')}")
-        end
-        add_named_conversion_procs(procs, PG_NAMED__TYPES)
-        procs
-      end
-
-      # PostgreSQL specific index SQL.
       def index_definition_sql(table_name, index)
         cols = index[:columns]
         index_name = index[:name] || default_index_name(table_name, cols)
@@ -1129,6 +991,7 @@ module Sequel
         else
           literal(Array(cols))
         end
+        if_not_exists = " IF NOT EXISTS" if index[:if_not_exists]
         unique = "UNIQUE " if index[:unique]
         index_type = index[:type]
         filter = index[:where] || index[:filter]
@@ -1140,7 +1003,7 @@ module Sequel
         when :spatial
           index_type = :gist
         end
-        "CREATE #{unique}INDEX#{' CONCURRENTLY' if index[:concurrently]} #{quote_identifier(index_name)} ON #{quote_schema_table(table_name)} #{"USING #{index_type} " if index_type}#{expr}#{filter}"
+        "CREATE #{unique}INDEX#{' CONCURRENTLY' if index[:concurrently]}#{if_not_exists} #{quote_identifier(index_name)} ON #{quote_schema_table(table_name)} #{"USING #{index_type} " if index_type}#{expr}#{filter}"
       end
 
       # Setup datastructures shared by all postgres adapters.
@@ -1148,10 +1011,8 @@ module Sequel
         @primary_keys = {}
         @primary_key_sequences = {}
         @supported_types = {}
-        @conversion_procs = get_conversion_procs # SEQUEL5: Remove
-        conversion_procs_updated # SEQUEL5: Remove
-        # @conversion_procs = CONVERSION_PROCS.dup # SEQUEL5
-        # procs[1184] = procs[1114] = method(:to_application_timestamp) # SEQUEL5
+        procs = @conversion_procs = CONVERSION_PROCS.dup
+        procs[1184] = procs[1114] = method(:to_application_timestamp)
       end
 
       # Backbone of the tables and views support.
@@ -1168,8 +1029,7 @@ module Sequel
         end
       end
 
-      # Use a dollar sign instead of question mark for the argument
-      # placeholder.
+      # Use a dollar sign instead of question mark for the argument placeholder.
       def prepared_arg_placeholder
         PREPARED_ARG_PLACEHOLDER
       end
@@ -1196,8 +1056,7 @@ module Sequel
         Sequel.cast(expr.to_s,:regclass).cast(:oid)
       end
 
-      # Remove the cached entries for primary keys and sequences when a table is
-      # changed.
+      # Remove the cached entries for primary keys and sequences when a table is changed.
       def remove_cached_schema(table)
         tab = quote_schema_table(table)
         Sequel.synchronize do
@@ -1213,7 +1072,6 @@ module Sequel
         "ALTER TABLE #{quote_schema_table(name)} RENAME TO #{quote_identifier(schema_and_table(new_name).last)}"
       end
 
-      # Recognize PostgreSQL interval type.
       def schema_column_type(db_type)
         case db_type
         when /\Ainterval\z/io
@@ -1315,7 +1173,7 @@ module Sequel
       # PostgreSQL prefers the text datatype.  If a fixed size is requested,
       # the char type is used.  If the text type is specifically
       # disallowed or there is a size specified, use the varchar type.
-      # Otherwise use the type type.
+      # Otherwise use the text type.
       def type_literal_generic_string(column)
         if column[:fixed]
           "char(#{column[:size]||255})"
@@ -1332,85 +1190,11 @@ module Sequel
       end
     end
 
-    # Instance methods for datasets that connect to a PostgreSQL database.
     module DatasetMethods
       include UnmodifiedIdentifiers::DatasetMethods
 
-      ACCESS_SHARE = 'ACCESS SHARE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ACCESS_SHARE)
-      ACCESS_EXCLUSIVE = 'ACCESS EXCLUSIVE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ACCESS_EXCLUSIVE)
-      BOOL_FALSE = 'false'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-      BOOL_TRUE = 'true'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-      COMMA_SEPARATOR = ', '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA_SEPARATOR)
-      EXCLUSIVE = 'EXCLUSIVE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXCLUSIVE)
-      EXPLAIN = 'EXPLAIN '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXPLAIN)
-      EXPLAIN_ANALYZE = 'EXPLAIN ANALYZE '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXPLAIN_ANALYZE)
-      FOR_SHARE = ' FOR SHARE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :FOR_SHARE)
-      PG_TIMESTAMP_FORMAT = "TIMESTAMP '%Y-%m-%d %H:%M:%S".freeze
-      Sequel::Deprecation.deprecate_constant(self, :PG_TIMESTAMP_FORMAT)
-      QUERY_PLAN = 'QUERY PLAN'.to_sym
-      Sequel::Deprecation.deprecate_constant(self, :QUERY_PLAN)
-      ROW_EXCLUSIVE = 'ROW EXCLUSIVE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ROW_EXCLUSIVE)
-      ROW_SHARE = 'ROW SHARE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ROW_SHARE)
-      SHARE = 'SHARE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SHARE)
-      SHARE_ROW_EXCLUSIVE = 'SHARE ROW EXCLUSIVE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SHARE_ROW_EXCLUSIVE)
-      SHARE_UPDATE_EXCLUSIVE = 'SHARE UPDATE EXCLUSIVE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SHARE_UPDATE_EXCLUSIVE)
-      SQL_WITH_RECURSIVE = "WITH RECURSIVE ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_WITH_RECURSIVE)
-      SPACE = ' '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SPACE)
-      FROM = ' FROM '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :FROM)
-      APOS = "'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS)
-      APOS_RE = /'/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS_RE)
-      DOUBLE_APOS = "''".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_APOS)
-      PAREN_CLOSE = ')'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PAREN_CLOSE)
-      PAREN_OPEN = '('.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PAREN_OPEN)
-      COMMA = ', '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA)
-      ESCAPE = " ESCAPE ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ESCAPE)
-      BACKSLASH = "\\".freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKSLASH)
-      AS = ' AS '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :AS)
-      XOR_OP = ' # '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :XOR_OP)
-      CRLF = "\r\n".freeze
-      Sequel::Deprecation.deprecate_constant(self, :CRLF)
-      BLOB_RE = /[\000-\037\047\134\177-\377]/n.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BLOB_RE)
-      WINDOW = " WINDOW ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :WINDOW)
-      SELECT_VALUES = "VALUES ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SELECT_VALUES)
-      EMPTY_STRING = ''.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY_STRING)
-      SKIP_LOCKED = " SKIP LOCKED".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SKIP_LOCKED)
-      NON_SQL_OPTIONS = (Dataset::NON_SQL_OPTIONS + [:cursor, :insert_conflict]).freeze
-      Sequel::Deprecation.deprecate_constant(self, :NON_SQL_OPTIONS)
-
       NULL = LiteralString.new('NULL').freeze
-      LOCK_MODES = ['ACCESS SHARE', 'ROW SHARE', 'ROW EXCLUSIVE', 'SHARE UPDATE EXCLUSIVE', 'SHARE', 'SHARE ROW EXCLUSIVE', 'EXCLUSIVE', 'ACCESS EXCLUSIVE'].each(&:freeze)#.freeze # SEQUEL5
+      LOCK_MODES = ['ACCESS SHARE', 'ROW SHARE', 'ROW EXCLUSIVE', 'SHARE UPDATE EXCLUSIVE', 'SHARE', 'SHARE ROW EXCLUSIVE', 'EXCLUSIVE', 'ACCESS EXCLUSIVE'].each(&:freeze).freeze
 
       Dataset.def_sql_method(self, :delete, [['if server_version >= 90100', %w'with delete from using where returning'], ['else', %w'delete from using where returning']])
       Dataset.def_sql_method(self, :insert, [['if server_version >= 90500', %w'with insert into columns values conflict returning'], ['elsif server_version >= 90100', %w'with insert into columns values returning'], ['else', %w'insert into columns values returning']])
@@ -1561,28 +1345,28 @@ module Sequel
       #
       # Examples:
       #
-      #   DB[:table].insert_conflict.insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict.insert(a: 1, b: 2)
       #   # INSERT INTO TABLE (a, b) VALUES (1, 2)
       #   # ON CONFLICT DO NOTHING
       #   
-      #   DB[:table].insert_conflict(:constraint=>:table_a_uidx).insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict(constraint: :table_a_uidx).insert(a: 1, b: 2)
       #   # INSERT INTO TABLE (a, b) VALUES (1, 2)
       #   # ON CONFLICT ON CONSTRAINT table_a_uidx DO NOTHING
       #   
-      #   DB[:table].insert_conflict(:target=>:a).insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict(target: :a).insert(a: 1, b: 2)
       #   # INSERT INTO TABLE (a, b) VALUES (1, 2)
       #   # ON CONFLICT (a) DO NOTHING
       #
-      #   DB[:table].insert_conflict(:target=>:a, :conflict_where=>{:c=>true}).insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict(target: :a, conflict_where: {c: true}).insert(a: 1, b: 2)
       #   # INSERT INTO TABLE (a, b) VALUES (1, 2)
       #   # ON CONFLICT (a) WHERE (c IS TRUE) DO NOTHING
       #   
-      #   DB[:table].insert_conflict(:target=>:a, :update=>{:b=>:excluded__b}).insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict(target: :a, update: {b: Sequel[:excluded][:b]}).insert(a: 1, b: 2)
       #   # INSERT INTO TABLE (a, b) VALUES (1, 2)
       #   # ON CONFLICT (a) DO UPDATE SET b = excluded.b
       #   
-      #   DB[:table].insert_conflict(:constraint=>:table_a_uidx,
-      #     :update=>{:b=>:excluded__b}, :update_where=>{:table__status_id=>1}).insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict(constraint: :table_a_uidx,
+      #     update: {b: Sequel[:excluded][:b]}, update_where: {Sequel[:table][:status_id] => 1}).insert(a: 1, b: 2)
       #   # INSERT INTO TABLE (a, b) VALUES (1, 2)
       #   # ON CONFLICT ON CONSTRAINT table_a_uidx
       #   # DO UPDATE SET b = excluded.b WHERE (table.status_id = 1)
@@ -1593,7 +1377,7 @@ module Sequel
       # Ignore uniqueness/exclusion violations when inserting, using ON CONFLICT DO NOTHING.
       # Exists mostly for compatibility to MySQL's insert_ignore. Example:
       #
-      #   DB[:table].insert_ignore.insert(:a=>1, :b=>2)
+      #   DB[:table].insert_ignore.insert(a: 1, b: 2)
       #   # INSERT INTO TABLE (a, b) VALUES (1, 2)
       #   # ON CONFLICT DO NOTHING
       def insert_ignore
@@ -1616,7 +1400,7 @@ module Sequel
 
       # Locks all tables in the dataset's FROM clause (but not in JOINs) with
       # the specified mode (e.g. 'EXCLUSIVE').  If a block is given, starts
-      # a new transaction, locks the table, and yields.  If a block is not given
+      # a new transaction, locks the table, and yields.  If a block is not given,
       # just locks the tables.  Note that PostgreSQL will probably raise an error
       # if you lock the table outside of an existing transaction.  Returns nil.
       def lock(mode, opts=OPTS)
@@ -1679,7 +1463,7 @@ module Sequel
         server_version >= 90500
       end
 
-      # PostgreSQL 9.3rc1+ supports lateral subqueries
+      # PostgreSQL 9.3+ supports lateral subqueries
       def supports_lateral_subqueries?
         server_version >= 90300
       end
@@ -1725,10 +1509,11 @@ module Sequel
       # :only and :restart only work correctly on PostgreSQL 8.4+.
       #
       # Usage:
-      #   DB[:table].truncate # TRUNCATE TABLE "table"
-      #   # => nil
-      #   DB[:table].truncate(:cascade => true, :only=>true, :restart=>true) # TRUNCATE TABLE ONLY "table" RESTART IDENTITY CASCADE
-      #   # => nil
+      #   DB[:table].truncate
+      #   # TRUNCATE TABLE "table"
+      #
+      #   DB[:table].truncate(cascade: true, only: true, restart: true)
+      #   # TRUNCATE TABLE ONLY "table" RESTART IDENTITY CASCADE
       def truncate(opts = OPTS)
         if opts.empty?
           super()

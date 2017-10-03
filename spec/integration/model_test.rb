@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
+require_relative "spec_helper"
 
 describe "Sequel::Model basic support" do 
   before do
@@ -49,20 +49,9 @@ describe "Sequel::Model basic support" do
     Item.all.must_equal [Item.load(:id=>1, :name=>'J')]
   end
 
-  deprecated "should not raise an error if the implied database table doesn't exist" do
-    class ::Item::Thing < Sequel::Model(@db)
-      set_dataset :items
-    end
-    Item.create(:name=>'J')
-    Item::Thing.first.must_equal Item::Thing.load(:id=>1, :name=>'J')
-  end
-
-  it "should raise an error if the implied database table doesn't exist if require_valid_table is true" do
+  it "should raise an error if the implied database table doesn't exist" do
     proc do
-      c = Sequel::Model(@db)
-      c.require_valid_table = true
-      class ::Item::Thing < c
-        set_dataset :items
+      class ::Item::Thing < Sequel::Model
       end
     end.must_raise Sequel::Error
   end
@@ -106,59 +95,6 @@ describe "Sequel::Model basic support" do
       raise Sequel::Rollback
     end
     i.save.must_be_nil
-  end
-
-  deprecated "#should respect after_commit, after_rollback, after_destroy_commit, and after_destroy_rollback hooks" do
-    i = Item.create(:name=>'J')
-    i.use_transactions = true
-    def i.hooks
-      @hooks
-    end
-    def i.rb=(x)
-      @hooks = []
-      @rb = x
-    end
-    def i.after_save
-      @hooks << :as
-      raise Sequel::Rollback if @rb
-    end
-    def i.after_destroy
-      @hooks << :ad
-      raise Sequel::Rollback if @rb
-    end
-    def i.after_commit
-      @hooks << :ac
-    end
-    def i.after_rollback
-      @hooks << :ar
-    end
-    def i.after_destroy_commit
-      @hooks << :adc
-    end
-    def i.after_destroy_rollback
-      @hooks << :adr
-    end
-    i.name = 'K'
-    i.rb = true
-    i.save.must_be_nil
-    i.reload.name.must_equal 'J'
-    i.hooks.must_equal [:as, :ar]
-
-    i.rb = true
-    i.destroy.must_be_nil
-    i.exists?.must_equal true
-    i.hooks.must_equal [:ad, :adr]
-
-    i.name = 'K'
-    i.rb = false
-    i.save.wont_equal nil
-    i.reload.name.must_equal 'K'
-    i.hooks.must_equal [:as, :ac]
-
-    i.rb = false
-    i.destroy.wont_equal nil
-    i.exists?.must_equal false
-    i.hooks.must_equal [:ad, :adc]
   end
 
   it "#exists? should return whether the item is still in the database" do
@@ -239,27 +175,13 @@ describe "Sequel::Model basic support" do
 end
 
 describe "Sequel::Model with no existing table" do 
-  deprecated "should not raise an error when setting the dataset" do
+  it "should not raise an error when setting the dataset" do
     db = DB
     db.drop_table?(:items)
     c = Class.new(Sequel::Model)
-    c.set_dataset(db[:items])
-    db.transaction do
-      c = Class.new(Sequel::Model(db[:items]))
-      db.get(Sequel.cast(1, Integer)).must_equal 1
-    end
-  end
-
-  it "should not raise an error when setting the dataset when require_valid_table is true" do
-    db = DB
-    db.drop_table?(:items)
-    c1 = Sequel::Model(db);
-    c = Class.new(Sequel::Model)
-    c.require_valid_table = true
     proc{c.set_dataset(db[:items])}.must_raise Sequel::Error
     db.transaction do
       c = Class.new(Sequel::Model)
-      c.require_valid_table = true
       proc{c.dataset = db[:items]}.must_raise Sequel::Error
       db.get(Sequel.cast(1, Integer)).must_equal 1
     end

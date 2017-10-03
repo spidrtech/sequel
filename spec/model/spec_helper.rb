@@ -1,25 +1,15 @@
-require 'rubygems'
-require "#{File.dirname(File.dirname(__FILE__))}/sequel_warning.rb"
+require_relative "../sequel_warning"
 
-unless Object.const_defined?('Sequel') && Sequel.const_defined?('Model') 
-  $:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../../lib/"))
-  require 'sequel'
-end
+$:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../../lib/"))
+require_relative "../../lib/sequel"
+
 Sequel::Deprecation.backtrace_filter = lambda{|line, lineno| lineno < 4 || line =~ /_spec\.rb/}
 
 gem 'minitest'
 require 'minitest/autorun'
 require 'minitest/hooks/default'
 
-require "#{File.dirname(File.dirname(__FILE__))}/deprecation_helper.rb"
-
-# SEQUEL5: Remove
-output = Sequel::Deprecation.output
-Sequel::Deprecation.output = nil
-Sequel.quote_identifiers = false
-Sequel.identifier_input_method = nil
-Sequel.identifier_output_method = nil
-Sequel::Deprecation.output = output
+require_relative '../deprecation_helper'
 
 class << Sequel::Model
   attr_writer :db_schema

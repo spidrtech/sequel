@@ -30,7 +30,7 @@
 # Since the hstore type only supports strings, non string keys and
 # values are converted to strings
 #
-#   Sequel.hstore(:foo=>1).to_hash # {'foo'=>'1'}
+#   Sequel.hstore(foo: 1).to_hash # {'foo'=>'1'}
 #   v = Sequel.hstore({})
 #   v[:foo] = 1
 #   v # {'foo'=>'1'}
@@ -68,7 +68,7 @@
 #
 # If you want to insert a hash into an hstore database column:
 #
-#   DB[:table].insert(:column=>Sequel.hstore('foo'=>'bar'))
+#   DB[:table].insert(column: Sequel.hstore('foo'=>'bar'))
 #
 # To use this extension, first load it into your Sequel::Database instance:
 #
@@ -91,21 +91,6 @@ module Sequel
 
       # Parser for PostgreSQL hstore output format.
       class Parser < StringScanner
-        QUOTE_RE = /"/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :QUOTE_RE)
-        KV_SEP_RE = /"\s*=>\s*/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :KV_SEP_RE)
-        NULL_RE = /NULL/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :NULL_RE)
-        SEP_RE = /,\s*/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :SEP_RE)
-        QUOTED_RE = /(\\"|[^"])*/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :QUOTED_RE)
-        REPLACE_RE = /\\(.)/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :REPLACE_RE)
-        REPLACE_WITH = '\1'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :REPLACE_WITH)
-
         # Parse the output format that PostgreSQL uses for hstore
         # columns.  Note that this does not attempt to parse all
         # input formats that PostgreSQL will accept.  For instance,
@@ -144,7 +129,7 @@ module Sequel
 
       module DatabaseMethods
         def self.extended(db)
-          db.instance_eval do
+          db.instance_exec do
             add_named_conversion_proc(:hstore, &HStore.method(:parse))
             @schema_type_classes[:hstore] = HStore
           end
@@ -160,13 +145,6 @@ module Sequel
           else
             super
           end
-        end
-
-        # SEQUEL5: Remove
-        def reset_conversion_procs
-          procs = super
-          add_named_conversion_proc(:hstore, &HStore.method(:parse))
-          procs 
         end
 
         private
@@ -198,29 +176,12 @@ module Sequel
       # keys to strings during lookup.
       DEFAULT_PROC = lambda{|h, k| h[k.to_s] unless k.is_a?(String)}
 
-      QUOTE = '"'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :QUOTE)
-      COMMA = ",".freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA)
-      KV_SEP = "=>".freeze
-      Sequel::Deprecation.deprecate_constant(self, :KV_SEP)
-      NULL = "NULL".freeze
-      Sequel::Deprecation.deprecate_constant(self, :NULL)
-      ESCAPE_RE = /("|\\)/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ESCAPE_RE)
-      ESCAPE_REPLACE = '\\\\\1'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ESCAPE_REPLACE)
-      HSTORE_CAST = '::hstore'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :HSTORE_CAST)
-
-      if RUBY_VERSION >= '1.9'
-        # Undef 1.9 marshal_{dump,load} methods in the delegate class,
-        # so that ruby 1.9 uses the old style _dump/_load methods defined
-        # in the delegate class, instead of the marshal_{dump,load} methods
-        # in the Hash class.
-        undef_method :marshal_load
-        undef_method :marshal_dump
-      end
+      # Undef marshal_{dump,load} methods in the delegate class,
+      # so that ruby uses the old style _dump/_load methods defined
+      # in the delegate class, instead of the marshal_{dump,load} methods
+      # in the Hash class.
+      undef_method :marshal_load
+      undef_method :marshal_dump
 
       # Use custom marshal loading, since underlying hash uses a default proc.
       def self._load(args)
@@ -234,12 +195,12 @@ module Sequel
       end
 
       # Override methods that accept key argument to convert to string.
-      (%w'[] delete has_key? include? key? member?' + Array((%w'assoc' if RUBY_VERSION >= '1.9.0'))).each do |m|
+      %w'[] delete has_key? include? key? member? assoc'.each do |m|
         class_eval("def #{m}(k) super(k.to_s) end", __FILE__, __LINE__)
       end
 
       # Override methods that accept value argument to convert to string unless nil.
-      (%w'has_value? value?' + Array((%w'key rassoc' if RUBY_VERSION >= '1.9.0'))).each do |m|
+      %w'has_value? value? key rassoc'.each do |m|
         class_eval("def #{m}(v) super(convert_value(v)) end", __FILE__, __LINE__)
       end
 

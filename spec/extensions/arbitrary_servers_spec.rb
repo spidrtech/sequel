@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "arbtirary servers" do
   before do
@@ -33,7 +33,7 @@ describe "arbtirary servers" do
 
   it "should disconnect when connection is finished" do
     x, x1 = nil, nil
-    meta_def(@db, :disconnect_connection){|c| x = c}
+    @db.define_singleton_method(:disconnect_connection){|c| x = c}
     @db.synchronize(:host=>'host1', :database=>'db1') do |c|
       x1 = c
       @db.synchronize(:host=>'host1', :database=>'db1') do |c2|

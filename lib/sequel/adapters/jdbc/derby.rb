@@ -1,7 +1,7 @@
 # frozen-string-literal: true
 
 Sequel::JDBC.load_driver('org.apache.derby.jdbc.EmbeddedDriver', :Derby)
-Sequel.require 'adapters/jdbc/transactions'
+require_relative 'transactions'
 
 module Sequel
   module JDBC
@@ -13,13 +13,8 @@ module Sequel
       end
     end
 
-    # Database and Dataset support for Derby databases accessed via JDBC.
     module Derby
-      # Instance methods for Derby Database objects accessed via JDBC.
       module DatabaseMethods
-        PRIMARY_KEY_INDEX_RE = /\Asql\d+\z/i.freeze
-        Sequel::Deprecation.deprecate_constant(self, :PRIMARY_KEY_INDEX_RE)
-
         include ::Sequel::JDBC::Transactions
 
         # Derby doesn't support casting integer to varchar, only integer to char,
@@ -30,7 +25,6 @@ module Sequel
           (type == String) ? 'CHAR(254)' : super
         end
 
-        # Derby uses the :derby database type.
         def database_type
           :derby
         end
@@ -67,7 +61,6 @@ module Sequel
           ds.first
         end
     
-        # Derby-specific syntax for renaming columns and changing a columns type/nullity.
         def alter_table_sql(table, op)
           case op[:op]
           when :rename_column
@@ -183,49 +176,12 @@ module Sequel
           true
         end
 
-        # The SQL query to issue to check if a connection is valid.
         def valid_connection_sql
           @valid_connection_sql ||= select(1).sql
         end
       end
       
-      # Dataset class for Derby datasets accessed via JDBC.
       class Dataset < JDBC::Dataset
-        PAREN_CLOSE = ')'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :PAREN_CLOSE)
-        PAREN_OPEN = '('.freeze
-        Sequel::Deprecation.deprecate_constant(self, :PAREN_OPEN)
-        OFFSET = " OFFSET ".freeze
-        Sequel::Deprecation.deprecate_constant(self, :OFFSET)
-        CAST_STRING_OPEN = "RTRIM(".freeze
-        Sequel::Deprecation.deprecate_constant(self, :CAST_STRING_OPEN)
-        BLOB_OPEN = "CAST(X'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :BLOB_OPEN)
-        BLOB_CLOSE = "' AS BLOB)".freeze
-        Sequel::Deprecation.deprecate_constant(self, :BLOB_CLOSE)
-        HSTAR = "H*".freeze
-        Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-        TIME_FORMAT = "'%H:%M:%S'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :TIME_FORMAT)
-        DEFAULT_FROM = " FROM sysibm.sysdummy1".freeze
-        Sequel::Deprecation.deprecate_constant(self, :DEFAULT_FROM)
-        ROWS = " ROWS".freeze
-        Sequel::Deprecation.deprecate_constant(self, :ROWS)
-        FETCH_FIRST = " FETCH FIRST ".freeze
-        Sequel::Deprecation.deprecate_constant(self, :FETCH_FIRST)
-        ROWS_ONLY = " ROWS ONLY".freeze
-        Sequel::Deprecation.deprecate_constant(self, :ROWS_ONLY)
-        BOOL_TRUE_OLD = '(1 = 1)'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE_OLD)
-        BOOL_FALSE_OLD = '(1 = 0)'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE_OLD)
-        BOOL_TRUE = 'TRUE'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-        BOOL_FALSE = 'FALSE'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-        EMULATED_FUNCTION_MAP = {:char_length=>'length'.freeze}
-        Sequel::Deprecation.deprecate_constant(self, :EMULATED_FUNCTION_MAP)
-
         # Derby doesn't support an expression between CASE and WHEN,
         # so remove conditions.
         def case_expression_sql_append(sql, ce)
@@ -298,8 +254,7 @@ module Sequel
           false
         end
 
-        # Derby uses an expression yielding false for false values.
-        # Newer versions can use the FALSE literal, but older versions cannot.
+        # Newer Derby versions can use the FALSE literal, but older versions need an always false expression.
         def literal_false
           if db.svn_version >= 1040133
             'FALSE'
@@ -313,8 +268,7 @@ module Sequel
           v.strftime("'%H:%M:%S'")
         end
 
-        # Derby uses an expression yielding true for true values.
-        # Newer versions can use the TRUE literal, but older versions cannot.
+        # Newer Derby versions can use the TRUE literal, but older versions need an always false expression.
         def literal_true
           if db.svn_version >= 1040133
             'TRUE'
@@ -323,7 +277,7 @@ module Sequel
           end
         end
 
-        # Derby supports multiple rows in INSERT.
+        # Derby supports multiple rows for VALUES in INSERT.
         def multi_insert_sql_strategy
           :values
         end

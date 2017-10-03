@@ -75,7 +75,7 @@ module Sequel
 
   (
   # Error raised on an invalid operation, such as trying to update or delete
-  # a joined or grouped dataset.
+  # a joined or grouped dataset when the database does not support that.
   InvalidOperation = Class.new(Error)
   ).name
 
@@ -113,20 +113,4 @@ module Sequel
   # and won't reraise it (unless a reraise is requested).
   Rollback = Class.new(Error)
   ).name
-
-  # SEQUEL5: Remove
-  (UnbindDuplicate = Class.new(Error)).name
-
-  Error::AdapterNotFound = AdapterNotFound
-  Error::InvalidOperation = InvalidOperation
-  Error::InvalidValue = InvalidValue
-  Error::PoolTimeoutError = PoolTimeout
-  Error::Rollback = Rollback
-
-  Sequel::Deprecation.deprecate_constant(self, :UnbindDuplicate)
-  Sequel::Deprecation.deprecate_constant(Error, :AdapterNotFound)
-  Sequel::Deprecation.deprecate_constant(Error, :InvalidOperation)
-  Sequel::Deprecation.deprecate_constant(Error, :InvalidValue)
-  Sequel::Deprecation.deprecate_constant(Error, :PoolTimeoutError)
-  Sequel::Deprecation.deprecate_constant(Error, :Rollback)
 end

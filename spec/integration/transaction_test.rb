@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
+require_relative "spec_helper"
 
 describe "Database transactions" do
   before(:all) do
@@ -192,7 +192,6 @@ describe "Database transactions" do
       c = Class.new(Sequel::Model(@d))
       c.set_primary_key :name
       c.unrestrict_primary_key
-      c.use_after_commit_rollback = false
       @db.transaction(:prepare=>'XYZ'){c.create(:name => '1'); c.create(:name => '2').destroy}
       @db.commit_prepared_transaction('XYZ')
       @d.select_order_map(:name).must_equal ['1']
@@ -315,57 +314,6 @@ describe "Database transactions" do
   end
 end
 
-if (! defined?(RUBY_ENGINE) or RUBY_ENGINE == 'ruby') and RUBY_VERSION < '1.9'
-  describe "Database transactions and Thread#kill" do
-    before do
-      @db = DB
-      @db.create_table!(:items, :engine=>'InnoDB'){String :name; Integer :value}
-      @d = @db[:items]
-    end
-    after do
-      @db.drop_table?(:items)
-    end
-
-    it "should handle transactions inside threads" do
-      q = Queue.new
-      q1 = Queue.new
-      t = Thread.new do
-        @db.transaction do
-          @d.insert(:name => 'abc', :value => 1)
-          q1.push nil
-          q.pop
-          @d.insert(:name => 'def', :value => 2)
-        end
-      end
-      q1.pop
-      t.kill
-      @d.count.must_equal 0
-    end
-
-    if DB.supports_savepoints?
-      it "should handle transactions with savepoints inside threads" do
-        q = Queue.new
-        q1 = Queue.new
-        t = Thread.new do
-          @db.transaction do
-            @d.insert(:name => 'abc', :value => 1)
-            @db.transaction(:savepoint=>true) do
-              @d.insert(:name => 'def', :value => 2)
-              q1.push nil
-              q.pop
-              @d.insert(:name => 'ghi', :value => 3)
-            end
-            @d.insert(:name => 'jkl', :value => 4)
-          end
-        end
-        q1.pop
-        t.kill
-        @d.count.must_equal 0
-      end
-    end
-  end
-end
-
 describe "Database transaction retrying" do
   before(:all) do
     @db = DB
@@ -379,7 +327,7 @@ describe "Database transaction retrying" do
     @db.drop_table?(:items)
   end
 
-  cspecify "should be supported using the :retry_on option", [:db2] do
+  it "should be supported using the :retry_on option" do
     @d.insert('b')
     @d.insert('c')
     s = 'a'
@@ -390,7 +338,7 @@ describe "Database transaction retrying" do
     @d.select_order_map(:a).must_equal %w'b c d'
   end
 
-  cspecify "should limit number of retries via the :num_retries option", [:db2] do
+  it "should limit number of retries via the :num_retries option" do
     @d.insert('b')
     @d.insert('c')
     s = 'a'

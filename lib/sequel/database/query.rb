@@ -7,12 +7,8 @@ module Sequel
     # This methods generally execute SQL code on the database server.
     # ---------------------
 
-    STRING_DEFAULT_RE = /\A'(.*)'\z/
-    Sequel::Deprecation.deprecate_constant(self, :STRING_DEFAULT_RE)
-    CURRENT_TIMESTAMP_RE = /now|today|CURRENT|getdate|\ADate\(\)\z/i
-    Sequel::Deprecation.deprecate_constant(self, :CURRENT_TIMESTAMP_RE)
-    COLUMN_SCHEMA_DATETIME_TYPES = [:date, :datetime]#.freeze # SEQUEL5
-    COLUMN_SCHEMA_STRING_TYPES = [:string, :blob, :date, :datetime, :time, :enum, :set, :interval]#.freeze # SEQUEL5
+    COLUMN_SCHEMA_DATETIME_TYPES = [:date, :datetime].freeze
+    COLUMN_SCHEMA_STRING_TYPES = [:string, :blob, :date, :datetime, :time, :enum, :set, :interval].freeze
 
     # The prepared statement object hash for this database, keyed by name symbol
     attr_reader :prepared_statements
@@ -34,7 +30,7 @@ module Sequel
     # Call the prepared statement with the given name with the given hash
     # of arguments.
     #
-    #   DB[:items].where(:id=>1).prepare(:first, :sa)
+    #   DB[:items].where(id: 1).prepare(:first, :sa)
     #   DB.call(:sa) # SELECT * FROM items WHERE id = 1
     def call(ps_name, hash={}, &block)
       prepared_statement(ps_name).call(hash, &block)
@@ -47,7 +43,7 @@ module Sequel
       execute_dui(sql, opts, &block)
     end
 
-    # Method that should be used when issuing a DELETE, UPDATE, or INSERT
+    # Method that should be used when issuing a DELETE or UPDATE
     # statement.  By default, calls execute.
     # This method should not be called directly by user code.
     def execute_dui(sql, opts=OPTS, &block)
@@ -61,11 +57,11 @@ module Sequel
       execute_dui(sql, opts, &block)
     end
 
-    # Returns a single value from the database, e.g.:
+    # Returns a single value from the database, see Dataset#get.
     #
     #   DB.get(1) # SELECT 1
     #   # => 1
-    #   DB.get{server_version{}} # SELECT server_version()
+    #   DB.get{server_version.function} # SELECT server_version()
     def get(*args, &block)
       @default_dataset.get(*args, &block)
     end
@@ -310,9 +306,8 @@ module Sequel
 
     # Remove the cached schema for the given schema name
     def remove_cached_schema(table)
-      #SEQUEL5
-      #cache = @default_dataset.send(:cache)
-      #Sequel.synchronize{cache.clear}
+      cache = @default_dataset.send(:cache)
+      Sequel.synchronize{cache.clear}
       k = quote_schema_table(table)
       Sequel.synchronize{@schemas.delete(k)}
     end

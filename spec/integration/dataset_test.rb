@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
+require_relative "spec_helper"
 
 describe "Simple Dataset operations" do
   before do
@@ -47,12 +47,6 @@ describe "Simple Dataset operations" do
   it "should have insert work correctly with static SQL" do
     @db["INSERT INTO #{@ds.literal(:items)} (#{@ds.literal(:number)}) VALUES (20)"].insert
     @ds.filter(:id=>2).first[:number].must_equal 20
-  end
-
-  deprecated "should have insert_multiple return primary key values" do
-    @ds.extension(:sequel_3_dataset_methods).insert_multiple([{:number=>20}, {:number=>30}]).must_equal [2, 3]
-    @ds.filter(:id=>2).get(:number).must_equal 20
-    @ds.filter(:id=>3).get(:number).must_equal 30
   end
 
   it "should join correctly" do
@@ -108,7 +102,7 @@ describe "Simple Dataset operations" do
     @ds.all.must_equal [{:id=>1, :number=>11}]
   end
   
-  cspecify "should have update return the number of matched rows", [:do, :mysql] do
+  it "should have update return the number of matched rows" do
     @ds.update(:number=>:number).must_equal 1
     @ds.filter(:id=>1).update(:number=>:number).must_equal 1
     @ds.filter(:id=>2).update(:number=>:number).must_equal 0
@@ -171,7 +165,7 @@ describe "Simple Dataset operations" do
     @ds.all.must_equal [{:id=>1, :number=>10}]
   end
 
-  cspecify "should skip locked rows correctly", [:do] do
+  it "should skip locked rows correctly" do
     @ds.insert(:number=>10)
     q1 = Queue.new
     q2 = Queue.new
@@ -927,13 +921,13 @@ describe Sequel::SQL::Constants do
     (Time.now - @c[@ds.get(:t)]).must_be_close_to 0, 60
   end
 
-  cspecify "should have working CURRENT_TIMESTAMP", [:jdbc, :sqlite], [:swift] do
+  cspecify "should have working CURRENT_TIMESTAMP", [:jdbc, :sqlite] do
     @db.create_table!(:constants){DateTime :ts}
     @ds.insert(:ts=>Sequel::CURRENT_TIMESTAMP)
     (Time.now - @c[@ds.get(:ts)]).must_be_close_to 0, 60
   end
 
-  cspecify "should have working CURRENT_TIMESTAMP when used as a column default", [:jdbc, :sqlite], [:swift] do
+  cspecify "should have working CURRENT_TIMESTAMP when used as a column default", [:jdbc, :sqlite] do
     @db.create_table!(:constants){DateTime :ts, :default=>Sequel::CURRENT_TIMESTAMP}
     @ds.insert
     (Time.now - @c[@ds.get(:ts)]).must_be_close_to 0, 60
@@ -1053,12 +1047,6 @@ describe "Sequel::Dataset convenience methods" do
   end
   after(:all) do
     @db.drop_table?(:a)
-  end
-  
-  deprecated "#[]= should update matching rows" do
-    @ds.insert(20, 10)
-    @ds.extension(:sequel_3_dataset_methods)[:a=>20] = {:b=>30}
-    @ds.all.must_equal [{:a=>20, :b=>30}]
   end
   
   it "#empty? should return whether the dataset returns no rows" do
@@ -1750,36 +1738,6 @@ describe "Dataset identifier methods" do
     @ds.with_quote_identifiers(false).first.must_equal(:ab=>1)
   end
 end if IDENTIFIER_MANGLING
-
-describe "Dataset defaults and overrides" do
-  before(:all) do
-    @db = DB
-    @db.create_table!(:a){Integer :a}
-    deprecated do
-      @ds = @db[:a].order(:a).extension(:set_overrides)
-    end
-  end
-  before do
-    @ds.delete
-  end
-  after(:all) do
-    @db.drop_table?(:a)
-  end
-  
-  it "#set_defaults should set defaults that can be overridden" do
-    @ds = @ds.set_defaults(:a=>10)
-    @ds.insert
-    @ds.insert(:a=>20)
-    @ds.all.must_equal [{:a=>10}, {:a=>20}]
-  end
-  
-  it "#set_overrides should set defaults that cannot be overridden" do
-    @ds = @ds.set_overrides(:a=>10)
-    @ds.insert
-    @ds.insert(:a=>20)
-    @ds.all.must_equal [{:a=>10}, {:a=>10}]
-  end
-end
 
 if DB.dataset.supports_modifying_joins?
   describe "Modifying joined datasets" do

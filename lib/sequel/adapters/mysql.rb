@@ -7,16 +7,16 @@ rescue LoadError
 end
 raise(LoadError, "require 'mysql' did not define Mysql::CLIENT_MULTI_RESULTS!\n  You are probably using the pure ruby mysql.rb driver,\n  which Sequel does not support. You need to install\n  the C based adapter, and make sure that the mysql.so\n  file is loaded instead of the mysql.rb file.\n") unless defined?(Mysql::CLIENT_MULTI_RESULTS)
 
-Sequel.require %w'utils/mysql_mysql2 utils/mysql_prepared_statements', 'adapters'
+require_relative 'utils/mysql_mysql2'
+require_relative 'utils/mysql_prepared_statements'
 
 module Sequel
-  # Module for holding all MySQL-related classes and modules for Sequel.
   module MySQL
     TYPE_TRANSLATOR = tt = Class.new do
       def boolean(s) s.to_i != 0 end
       def integer(s) s.to_i end
       def float(s) s.to_f end
-    end.new#.freeze # SEQUEL5
+    end.new.freeze
 
     # Hash with integer keys and callable values for converting MySQL types.
     MYSQL_TYPES = {}
@@ -28,31 +28,12 @@ module Sequel
     }.each do |k,v|
       k.each{|n| MYSQL_TYPES[n] = v}
     end
-    # MYSQL_TYPES.freeze # SEQUEL5
+    MYSQL_TYPES.freeze
 
-    # SEQUEL5: Remove
-    @convert_invalid_date_time = false
-    class << self
-      def convert_invalid_date_time
-        Sequel::Deprecation.deprecate("Sequel::MySQL.convert_invalid_date_time", "Call this method on the Database instance")
-        @convert_invalid_date_time
-      end
-      def convert_invalid_date_time=(v)
-        Sequel::Deprecation.deprecate("Sequel::MySQL.convert_invalid_date_time=", "Call this method on the Database instance")
-        @convert_invalid_date_time = v
-      end
-    end
-
-    # Database class for MySQL databases used with Sequel.
     class Database < Sequel::Database
       include Sequel::MySQL::DatabaseMethods
       include Sequel::MySQL::MysqlMysql2::DatabaseMethods
       include Sequel::MySQL::PreparedStatements::DatabaseMethods
-      
-      # Regular expression used for getting accurate number of rows
-      # matched by an update statement.
-      AFFECTED_ROWS_RE = /Rows matched:\s+(\d+)\s+Changed:\s+\d+\s+Warnings:\s+\d+/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :AFFECTED_ROWS_RE)
       
       set_adapter_scheme :mysql
 
@@ -131,7 +112,6 @@ module Sequel
         conn
       end
       
-      # Closes given database connection.
       def disconnect_connection(c)
         c.close
       rescue Mysql::Error
@@ -159,12 +139,10 @@ module Sequel
         @convert_tinyint_to_bool = v
       end
 
-      # Return the number of matched rows when executing a delete/update statement.
       def execute_dui(sql, opts=OPTS)
         execute(sql, opts){|c| return affected_rows(c)}
       end
 
-      # Return the last inserted id when executing an insert statement.
       def execute_insert(sql, opts=OPTS)
         execute(sql, opts){|c| return c.insert_id}
       end
@@ -175,7 +153,7 @@ module Sequel
         super
       end
 
-      # Return the version of the MySQL server two which we are connecting.
+      # Return the version of the MySQL server to which we are connecting.
       def server_version(server=nil)
         @server_version ||= (synchronize(server){|conn| conn.server_version if conn.respond_to?(:server_version)} || super)
       end
@@ -231,8 +209,8 @@ module Sequel
       
       def adapter_initialize
         @conversion_procs = MYSQL_TYPES.dup
-        self.convert_tinyint_to_bool = Sequel::MySQL.instance_variable_get(:@convert_tinyint_to_bool) # true # SEQUEL5
-        self.convert_invalid_date_time = Sequel::MySQL.instance_variable_get(:@convert_invalid_date_time) # false # SEQUEL5
+        self.convert_tinyint_to_bool = true
+        self.convert_invalid_date_time = false
       end
 
       # Try to get an accurate number of rows matched using the query
@@ -270,7 +248,6 @@ module Sequel
         end
       end
     
-      # The MySQL adapter main error class is Mysql::Error
       def database_error_classes
         [Mysql::Error]
       end
@@ -283,17 +260,8 @@ module Sequel
         Dataset
       end
 
-      # Raise a disconnect error if the exception message matches the list
-      # of recognized exceptions.
       def disconnect_error?(e, opts)
         super || (e.is_a?(::Mysql::Error) && MYSQL_DATABASE_DISCONNECT_ERRORS.match(e.message))
-      end
-      
-      # The database name when using the native adapter is always stored in
-      # the :database option.
-      def database_name
-        Sequel::Deprecation.deprecate("Database#database_name", "Instead, use .get(Sequel.function(:DATABASE))")
-        @opts[:database]
       end
       
       # Convert tinyint(1) type to boolean if convert_tinyint_to_bool is true
@@ -302,14 +270,10 @@ module Sequel
       end
     end
     
-    # Dataset class for MySQL datasets accessed via the native driver.
     class Dataset < Sequel::Dataset
       include Sequel::MySQL::DatasetMethods
       include Sequel::MySQL::MysqlMysql2::DatasetMethods
       include Sequel::MySQL::PreparedStatements::DatasetMethods
-
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
 
       # Yield all rows matching this dataset.  If the dataset is set to
       # split multiple statements, yield arrays of hashes one per statement
@@ -367,7 +331,6 @@ module Sequel
         field.length != 1
       end
       
-      # Set the :type option to :select if it hasn't been set.
       def execute(sql, opts=OPTS)
         opts = Hash[opts]
         opts[:type] = :select

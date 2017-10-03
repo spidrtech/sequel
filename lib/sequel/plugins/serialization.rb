@@ -2,15 +2,15 @@
 
 module Sequel
   module Plugins
-    # Sequel's built in Serialization plugin allows you to keep serialized
+    # The serialization plugin allows you to keep serialized
     # ruby objects in the database, while giving you deserialized objects
     # when you call an accessor.
     #
     # This plugin works by keeping the serialized value in the values, and
     # adding a deserialized_values hash.  The reader method for serialized columns
     # will check the deserialized_values for the value, return it if present,
-    # or deserialized the entry in values and return it.  The writer method will
-    # set the deserialized_values entry.  This plugin adds a before_save hook
+    # or deserialize the entry in values and return it.  The writer method will
+    # set the deserialized_values entry.  This plugin adds a before_validation hook
     # that serializes all deserialized_values to values.
     #
     # You can specify the serialization format as a pair of serializer/deserializer
@@ -37,9 +37,7 @@ module Sequel
     #
     #   # Register custom serializer/deserializer pair, if desired
     #   require 'sequel/plugins/serialization'
-    #   Sequel::Plugins::Serialization.register_format(:reverse,
-    #     lambda(&:reverse),
-    #     lambda(&:reverse))
+    #   Sequel::Plugins::Serialization.register_format(:reverse, :reverse.to_proc, :reverse.to_proc)
     #
     #   class User < Sequel::Model
     #     # Built-in format support when loading the plugin
@@ -53,10 +51,10 @@ module Sequel
     #     serialize_attributes :reverse, :password
     #
     #     # Use a custom serializer/deserializer pair without registering
-    #     serialize_attributes [lambda(&:reverse), lambda(&:reverse)], :password
+    #     serialize_attributes [:reverse.to_proc, :reverse.to_proc], :password
     #   end
     #   user = User.create
-    #   user.permissions = { :global => 'read-only' }
+    #   user.permissions = {global: 'read-only'}
     #   user.save
     #
     # Note that if you mutate serialized column values without reassigning them,
@@ -77,7 +75,7 @@ module Sequel
       # Set up the column readers to do deserialization and the column writers
       # to save the value in deserialized_values.
       def self.apply(model, *args)
-        model.instance_eval do
+        model.instance_exec do
           @deserialization_map = {}
           @serialization_map = {}
         end
@@ -93,7 +91,7 @@ module Sequel
       # models to pick this format by name.  Both serializer and deserializer
       # should be callable objects.
       def self.register_format(format, serializer, deserializer)
-        REGISTERED_FORMATS[format] = [serializer, deserializer]
+        Sequel.synchronize{REGISTERED_FORMATS[format] = [serializer, deserializer].freeze}
       end
       register_format(:marshal, lambda{|v| [Marshal.dump(v)].pack('m')},
         lambda do |v|
@@ -101,8 +99,8 @@ module Sequel
           v = v.unpack('m')[0] unless v[0..1] == "\x04\x08"
           Marshal.load(v)
         end)
-      register_format(:yaml, lambda(&:to_yaml), lambda{|v| YAML.load(v)})
-      register_format(:json, lambda{|v| Sequel.object_to_json(v)}, lambda{|v| Sequel.parse_json(v)})
+      register_format(:yaml, :to_yaml.to_proc, lambda{|s| YAML.load(s)})
+      register_format(:json, Sequel.method(:object_to_json), Sequel.method(:parse_json))
 
       module ClassMethods
         # A hash with column name symbols and callable values, with the value
@@ -112,15 +110,6 @@ module Sequel
         # A hash with column name symbols and callable values, with the value
         # called to serialize the column.
         attr_reader :serialization_map
-
-        def serialization_module
-          Sequel::Deprecation.deprecate('Sequel::Model.serialization_module', 'There is no replacement')
-          @serialization_module
-        end
-        def serialization_module=(v)
-          Sequel::Deprecation.deprecate('Sequel::Model.serialization_module=', 'There is no replacement')
-          @serialization_module = v
-        end
 
         Plugins.inherited_instance_variables(self, :@deserialization_map=>:dup, :@serialization_map=>:dup)
 
@@ -137,8 +126,8 @@ module Sequel
         # and instance level writer that stores new deserialized values.
         def serialize_attributes(format, *columns)
           if format.is_a?(Symbol)
-            unless format = REGISTERED_FORMATS[format]
-              raise(Error, "Unsupported serialization format: #{format} (valid formats: #{REGISTERED_FORMATS.keys.map(&:inspect).join})")
+            unless format = Sequel.synchronize{REGISTERED_FORMATS[format]}
+              raise(Error, "Unsupported serialization format: #{format} (valid formats: #{Sequel.synchronize{REGISTERED_FORMATS.keys}.map(&:inspect).join})")
             end
           end
           serializer, deserializer = format
@@ -146,13 +135,6 @@ module Sequel
           define_serialized_attribute_accessor(serializer, deserializer, *columns)
         end
         
-        # The columns that will be serialized.  This is only for
-        # backwards compatibility, use serialization_map in new code.
-        def serialized_columns
-          Sequel::Deprecation.deprecate("#{self}.serialized_columns in the serialization plugin", "Use #{self}.serialization_map.keys instead")
-          serialization_map.keys
-        end
-
         private
 
         # Add serializated attribute acessor methods to the serialization_module
@@ -198,14 +180,14 @@ module Sequel
           super
         end
 
-        private
-
         # Serialize deserialized values before saving
-        def _before_validation
+        def before_validation
           serialize_deserialized_values
           super
         end
         
+        private
+
         # Clear any cached deserialized values when doing a manual refresh.
         def _refresh_set_values(hash)
           @deserialized_values.clear if @deserialized_values

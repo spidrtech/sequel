@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "Sequel::Plugins::AssociationPks" do
   before do
@@ -88,13 +88,6 @@ describe "Sequel::Plugins::AssociationPks" do
     @db.sqls.must_equal ["SELECT tags.id FROM tags INNER JOIN albums_tags ON (albums_tags.tag_id = tags.id) WHERE (albums_tags.album_id = 2)"]
     @Album.load(:id=>3).tag_pks.must_equal []
     @db.sqls.must_equal ["SELECT tags.id FROM tags INNER JOIN albums_tags ON (albums_tags.tag_id = tags.id) WHERE (albums_tags.album_id = 3)"]
-  end
-
-  deprecated "should set associated pks correctly for a one_to_many association when :delay_pks is not set" do
-    @Artist.one_to_many :albums, :class=>@Album, :key=>:artist_id
-    @Artist.load(:id=>1).album_pks = [1, 2]
-    @db.sqls.must_equal ["UPDATE albums SET artist_id = 1 WHERE (id IN (1, 2))",
-      "UPDATE albums SET artist_id = NULL WHERE ((albums.artist_id = 1) AND (id NOT IN (1, 2)))"]
   end
 
   it "should set associated pks correctly for a one_to_many association" do
@@ -320,54 +313,6 @@ describe "Sequel::Plugins::AssociationPks" do
     sqls.length.must_equal 6
   end
 
-  deprecated "should handle delaying setting of association pks until after saving for new objects, if :delay_pks=>true association option is used" do
-    @Artist.one_to_many :albums, :clone=>:albums, :delay_pks=>true
-    @Album.many_to_many :tags, :clone=>:tags, :delay_pks=>true
-    @Album.db_schema[:id][:type] = :integer
-
-    ar = @Artist.new
-    ar.album_pks.must_equal []
-    ar.album_pks = ["1","2","3"]
-    ar.album_pks.must_equal [1,2,3]
-    @db.sqls.must_equal []
-
-    ar.save
-    @db.sqls.must_equal [
-      "INSERT INTO artists DEFAULT VALUES",
-      "UPDATE albums SET artist_id = 1 WHERE (id IN (1, 2, 3))",
-      "UPDATE albums SET artist_id = NULL WHERE ((albums.artist_id = 1) AND (id NOT IN (1, 2, 3)))",
-      "SELECT * FROM artists WHERE (id = 1) LIMIT 1",
-    ]
-
-    al = @Album.new
-    al.tag_pks.must_equal []
-    al.tag_pks = [1,2]
-    al.tag_pks.must_equal [1, 2]
-    @db.sqls.must_equal []
-
-    al.save
-    @db.sqls.must_equal [
-      "INSERT INTO albums DEFAULT VALUES",
-      "DELETE FROM albums_tags WHERE ((album_id = 2) AND (tag_id NOT IN (1, 2)))",
-      "SELECT tag_id FROM albums_tags WHERE (album_id = 2)",
-      "BEGIN",
-      "INSERT INTO albums_tags (album_id, tag_id) VALUES (2, 1)",
-      "COMMIT",
-      "SELECT * FROM albums WHERE (id = 2) LIMIT 1"
-    ]
-
-    al = @Album.load(:id=>1)
-    al.tag_pks = [2,3]
-    @db.sqls.must_equal [
-      "DELETE FROM albums_tags WHERE ((album_id = 1) AND (tag_id NOT IN (2, 3)))",
-      "SELECT tag_id FROM albums_tags WHERE (album_id = 1)",
-      "BEGIN",
-      "INSERT INTO albums_tags (album_id, tag_id) VALUES (1, 3)",
-      "COMMIT"
-    ]
-    al.tag_pks.must_equal [1, 2]
-  end
-
   it "should handle delaying setting of association pks until after saving for existing objects, if :delay_pks=>:always association option is used" do
     @Artist.one_to_many :albums, :clone=>:albums, :delay_pks=>:always
     @Album.many_to_many :tags, :clone=>:tags, :delay_pks=>:always
@@ -382,9 +327,9 @@ describe "Sequel::Plugins::AssociationPks" do
     ar.save
     @db.sqls.must_equal [
       "INSERT INTO artists DEFAULT VALUES",
+      "SELECT * FROM artists WHERE (id = 1) LIMIT 1",
       "UPDATE albums SET artist_id = 1 WHERE (id IN (1, 2, 3))",
       "UPDATE albums SET artist_id = NULL WHERE ((albums.artist_id = 1) AND (id NOT IN (1, 2, 3)))",
-      "SELECT * FROM artists WHERE (id = 1) LIMIT 1",
     ]
 
     al = @Album.new
@@ -396,12 +341,12 @@ describe "Sequel::Plugins::AssociationPks" do
     al.save
     @db.sqls.must_equal [
       "INSERT INTO albums DEFAULT VALUES",
+      "SELECT * FROM albums WHERE (id = 2) LIMIT 1",
       "DELETE FROM albums_tags WHERE ((album_id = 2) AND (tag_id NOT IN (1, 2)))",
       "SELECT tag_id FROM albums_tags WHERE (album_id = 2)",
       "BEGIN",
       "INSERT INTO albums_tags (album_id, tag_id) VALUES (2, 1)",
-      "COMMIT",
-      "SELECT * FROM albums WHERE (id = 2) LIMIT 1"
+      "COMMIT"
     ]
     ar = @Artist.load(:id=>1)
     ar.album_pks.must_equal [1,2,3]

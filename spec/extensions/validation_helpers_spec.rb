@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "Sequel::Plugins::ValidationHelpers" do
   before do
@@ -19,9 +19,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.value = '1_1'
     @m.must_be :valid?
     o = String.new
-    class << o
-      undef_method :blank?
-    end
+    o.singleton_class.send(:undef_method, :blank?)
     @m.value = o
     @m.must_be :valid?
     o = Object.new
@@ -84,38 +82,6 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @m.wont_be :valid?
     @m.value2 = 1
     @m.must_be :valid?
-  end
-  
-  deprecated "should support modifying default options for all models" do
-    @c.set_validations{validates_presence(:value)}
-    @m.wont_be :valid?
-    @m.errors.must_equal(:value=>['is not present'])
-    o = Sequel::Plugins::ValidationHelpers::DEFAULT_OPTIONS[:presence].dup
-    Sequel::Plugins::ValidationHelpers::DEFAULT_OPTIONS[:presence][:message] = lambda{"was not entered"}
-    @m.wont_be :valid?
-    @m.errors.must_equal(:value=>["was not entered"])
-    @m.value = 1
-    @m.must_be :valid?
-    
-    @m.values.clear
-    Sequel::Plugins::ValidationHelpers::DEFAULT_OPTIONS[:presence][:allow_missing] = true
-    @m.must_be :valid?
-    @m.value = nil
-    @m.wont_be :valid?
-    @m.errors.must_equal(:value=>["was not entered"])
-
-    c = Class.new(Sequel::Model)
-    c.class_eval do
-      plugin :validation_helpers
-      set_columns([:value])
-      def validate
-        validates_presence(:value)
-      end
-    end
-    m = c.new(:value=>nil)
-    m.wont_be :valid?
-    m.errors.must_equal(:value=>["was not entered"])
-    Sequel::Plugins::ValidationHelpers::DEFAULT_OPTIONS[:presence] = o
   end
   
   it "should support modifying default validation options for a particular model" do
@@ -369,7 +335,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
   it "should support validates_unique with a single attribute" do
     @c.columns(:id, :username, :password)
     @c.set_dataset DB[:items]
-    @c.set_validations{validates_unique(:username)}
+    @c.set_validations{validates_unique(:username, :only_if_modified=>false)}
     @c.dataset = @c.dataset.with_fetch(proc do |sql|
       case sql
       when /count.*username = '0records'/
@@ -407,7 +373,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
   it "should support validates_unique with multiple attributes" do
     @c.columns(:id, :username, :password)
     @c.set_dataset DB[:items]
-    @c.set_validations{validates_unique([:username, :password])}
+    @c.set_validations{validates_unique([:username, :password], :only_if_modified=>false)}
     @c.dataset = @c.dataset.with_fetch(proc do |sql|
       case sql
       when /count.*username = '0records'/
@@ -452,7 +418,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
   it "should support validates_unique with a block" do
     @c.columns(:id, :username, :password)
     @c.set_dataset DB[:items]
-    @c.set_validations{validates_unique(:username){|ds| ds.filter(:active)}}
+    @c.set_validations{validates_unique(:username, :only_if_modified=>false){|ds| ds.filter(:active)}}
     @c.dataset = @c.dataset.with_fetch(:v=>0)
     
     DB.reset
@@ -465,7 +431,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
   it "should support validates_unique with :where option" do
     @c.columns(:id, :username, :password)
     @c.set_dataset DB[:items]
-    @c.set_validations{validates_unique(:username, :where=>proc{|ds, obj, cols| ds.where(cols.map{|c| [Sequel.function(:lower, c), obj.send(c).downcase]})})}
+    @c.set_validations{validates_unique(:username, :only_if_modified=>false, :where=>proc{|ds, obj, cols| ds.where(cols.map{|c| [Sequel.function(:lower, c), obj.send(c).downcase]})})}
     @c.dataset = @c.dataset.with_fetch(:v=>0)
     
     DB.reset
@@ -479,7 +445,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @c.columns(:id, :username, :password)
     @c.set_dataset DB[:items]
     c = @c
-    @c.set_validations{validates_unique(:username, :dataset=>c.where(:a=>[1,2,3]))}
+    @c.set_validations{validates_unique(:username, :only_if_modified=>false, :dataset=>c.where(:a=>[1,2,3]))}
     @c.dataset = @c.dataset.with_fetch(:v=>0)
     
     DB.reset
@@ -493,7 +459,7 @@ describe "Sequel::Plugins::ValidationHelpers" do
     @c.columns(:id, :username, :password)
     @c.set_dataset DB[:items]
     c = @c
-    @c.set_validations{validates_unique(:username, :dataset=>c.cross_join(:a))}
+    @c.set_validations{validates_unique(:username, :only_if_modified=>false, :dataset=>c.cross_join(:a))}
     @c.dataset = @c.dataset.with_fetch(:v=>0)
     
     DB.reset
@@ -503,10 +469,10 @@ describe "Sequel::Plugins::ValidationHelpers" do
                     "SELECT count(*) AS count FROM items CROSS JOIN a WHERE ((username = '0records') AND (items.id != 3)) LIMIT 1"]
   end
 
-  it "should support :only_if_modified option for validates_unique, and not check uniqueness for existing records if values haven't changed" do
+  it "should not have validates_unique check uniqueness for existing records if values haven't changed" do
     @c.columns(:id, :username, :password)
     @c.set_dataset DB[:items]
-    @c.set_validations{validates_unique([:username, :password], :only_if_modified=>true)}
+    @c.set_validations{validates_unique([:username, :password])}
     @c.dataset = @c.dataset.with_fetch(:v=>0)
     
     DB.reset

@@ -76,8 +76,8 @@
 #
 # This feature is mostly useful for a different way to graph tables:
 #
-#   DB[:a].join(:b, :id=>:b_id).select(Sequel.pg_row_op(:a).splat(:a),
-#                                      Sequel.pg_row_op(:b).splat(:b))
+#   DB[:a].join(:b, id: :b_id).select(Sequel.pg_row_op(:a).splat(:a),
+#                                     Sequel.pg_row_op(:b).splat(:b))
 #   # SELECT (a.*)::a, (b.*)::b FROM a INNER JOIN b ON (b.id = a.b_id)
 #   # => {:a=>{:id=>1, :b_id=>2}, :b=>{:id=>2}}
 #
@@ -88,17 +88,6 @@ module Sequel
   module Postgres
     # This class represents a composite type expression reference.
     class PGRowOp < SQL::PlaceholderLiteralString
-      OPEN = '('.freeze
-      Sequel::Deprecation.deprecate_constant(self, :OPEN)
-      CLOSE_DOT = ').'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CLOSE_DOT)
-      CLOSE_STAR = '.*)'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CLOSE_STAR)
-      CLOSE_STAR_CAST = '.*)::'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CLOSE_STAR_CAST)
-      EMPTY = "".freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY)
-
       ROW = ['(', '.*)'].freeze.each(&:freeze)
       ROW_CAST = ['(', '.*)::'].freeze.each(&:freeze)
       QUALIFY = ['(', ').'].freeze.each(&:freeze)

@@ -10,8 +10,8 @@
 # Then you can use the Sequel.date_add and Sequel.date_sub methods
 # to return Sequel expressions:
 #
-#   add = Sequel.date_add(:date_column, :years=>1, :months=>2, :days=>3)
-#   sub = Sequel.date_sub(:date_column, :hours=>1, :minutes=>2, :seconds=>3)
+#   add = Sequel.date_add(:date_column, years: 1, months: 2, days: 3)
+#   sub = Sequel.date_sub(:date_column, hours: 1, minutes: 2, seconds: 3)
 #
 # In addition to specifying the interval as a hash, there is also
 # support for specifying the interval as an ActiveSupport::Duration
@@ -66,8 +66,6 @@ module Sequel
         DERBY_DURATION_UNITS = DURATION_UNITS.zip(DURATION_UNITS.map{|s| Sequel.lit("SQL_TSI_#{s.to_s.upcase[0...-1]}").freeze}).freeze
         ACCESS_DURATION_UNITS = DURATION_UNITS.zip(%w'yyyy m d h n s'.map(&:freeze)).freeze
         DB2_DURATION_UNITS = DURATION_UNITS.zip(DURATION_UNITS.map{|s| Sequel.lit(s.to_s).freeze}).freeze
-        FDBSQL_DURATION_UNITS = DURATION_UNITS.zip(DURATION_UNITS.map{|s| Sequel.lit(s.to_s.chop).freeze}).freeze
-        Sequel::Deprecation.deprecate_constant(self, :FDBSQL_DURATION_UNITS)
 
         # Append the SQL fragment for the DateAdd expression to the SQL query.
         def date_add_sql_append(sql, da)
@@ -93,8 +91,7 @@ module Sequel
               args << "#{value} #{sql_unit}"
             end
             return function_sql_append(sql, Sequel.function(:datetime, *args))
-          # SEQUEL5: Remove cubrid
-          when :mysql, :hsqldb, :cubrid
+          when :mysql, :hsqldb
             if db_type == :hsqldb
               # HSQLDB requires 2.2.9+ for the DATE_ADD function
               expr = Sequel.cast(expr, Time)
@@ -181,12 +178,15 @@ module Sequel
                raise Sequel::InvalidValue, "cannot provide String value as interval part: #{v.inspect}"
              end
           end
-          interval
+          Hash[interval]
         else
           h = Hash.new(0)
           interval.parts.each{|unit, value| h[unit] += value}
           Hash[h]
         end
+
+        @interval.freeze
+        freeze
       end
 
       to_s_method :date_add_sql

@@ -17,7 +17,7 @@ module Sequel
     
     # Returns an INSERT SQL query string.  See +insert+.
     #
-    #   DB[:items].insert_sql(:a=>1)
+    #   DB[:items].insert_sql(a: 1)
     #   # => "INSERT INTO items (a) VALUES (1)"
     def insert_sql(*values)
       return static_sql(@opts[:sql]) if @opts[:sql]
@@ -112,9 +112,6 @@ module Sequel
     # Returns an array of insert statements for inserting multiple records.
     # This method is used by +multi_insert+ to format insert statements and
     # expects a keys array and and an array of value arrays.
-    #
-    # This method should be overridden by descendants if the support
-    # inserting multiple records in a single SQL statement.
     def multi_insert_sql(columns, values)
       case multi_insert_sql_strategy
       when :values
@@ -165,7 +162,7 @@ module Sequel
 
     # Formats an UPDATE statement using the given values.  See +update+.
     #
-    #   DB[:items].update_sql(:price => 100, :category => 'software')
+    #   DB[:items].update_sql(price: 100, category: 'software')
     #   # => "UPDATE items SET price = 100, category = 'software'
     #
     # Raises an +Error+ if the dataset is grouped or includes more
@@ -179,8 +176,7 @@ module Sequel
       when LiteralString
         # nothing
       when String
-        Sequel::Deprecation.deprecate("Calling Sequel::Dataset#update/update_sql with a plain string", "Use Sequel.lit(#{values.inspect}) to create a literal string and pass that to update/update_sql, or use the auto_literal_strings extension")
-        # raise Error, "plain string passed to Dataset#update" # SEQUEL5
+        raise Error, "plain string passed to Dataset#update is not supported, use Sequel.lit to use a literal string"
       end
 
       clone(:values=>values).send(:_update_sql)
@@ -246,206 +242,16 @@ module Sequel
     DEFAULT = LiteralString.new('DEFAULT').freeze
 
     EXISTS = ['EXISTS '.freeze].freeze
-    BITWISE_METHOD_MAP = {:& =>:BITAND, :| => :BITOR, :^ => :BITXOR}#.freeze # SEQUEL5
-    COUNT_FROM_SELF_OPTS = [:distinct, :group, :sql, :limit, :offset, :compounds]#.freeze # SEQUEL5
+    BITWISE_METHOD_MAP = {:& =>:BITAND, :| => :BITOR, :^ => :BITXOR}.freeze
+    COUNT_FROM_SELF_OPTS = [:distinct, :group, :sql, :limit, :offset, :compounds].freeze
     IS_LITERALS = {nil=>'NULL'.freeze, true=>'TRUE'.freeze, false=>'FALSE'.freeze}.freeze
-    QUALIFY_KEYS = [:select, :where, :having, :order, :group]#.freeze # SEQUEL5
+    QUALIFY_KEYS = [:select, :where, :having, :order, :group].freeze
 
     IS_OPERATORS = ::Sequel::SQL::ComplexExpression::IS_OPERATORS
     LIKE_OPERATORS = ::Sequel::SQL::ComplexExpression::LIKE_OPERATORS
     N_ARITY_OPERATORS = ::Sequel::SQL::ComplexExpression::N_ARITY_OPERATORS
     TWO_ARITY_OPERATORS = ::Sequel::SQL::ComplexExpression::TWO_ARITY_OPERATORS
     REGEXP_OPERATORS = ::Sequel::SQL::ComplexExpression::REGEXP_OPERATORS
-
-    EMULATED_FUNCTION_MAP = {}
-    Sequel::Deprecation.deprecate_constant(self, :EMULATED_FUNCTION_MAP)
-
-    ALL = ' ALL'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :ALL)
-    AND_SEPARATOR = " AND ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :AND_SEPARATOR)
-    APOS = "'".freeze
-    Sequel::Deprecation.deprecate_constant(self, :APOS)
-    APOS_RE = /'/.freeze
-    Sequel::Deprecation.deprecate_constant(self, :APOS_RE)
-    ARRAY_EMPTY = '(NULL)'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :ARRAY_EMPTY)
-    AS = ' AS '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :AS)
-    ASC = ' ASC'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :ASC)
-    BACKSLASH = "\\".freeze
-    Sequel::Deprecation.deprecate_constant(self, :BACKSLASH)
-    BITCOMP_CLOSE = ") - 1)".freeze
-    Sequel::Deprecation.deprecate_constant(self, :BITCOMP_CLOSE)
-    BITCOMP_OPEN = "((0 - ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :BITCOMP_OPEN)
-    BOOL_FALSE = "'f'".freeze
-    Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-    BOOL_TRUE = "'t'".freeze
-    Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-    BRACKET_CLOSE =  ']'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :BRACKET_CLOSE)
-    BRACKET_OPEN = '['.freeze
-    Sequel::Deprecation.deprecate_constant(self, :BRACKET_OPEN)
-    CASE_ELSE = " ELSE ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :CASE_ELSE)
-    CASE_END = " END)".freeze
-    Sequel::Deprecation.deprecate_constant(self, :CASE_END)
-    CASE_OPEN = '(CASE'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :CASE_OPEN)
-    CASE_THEN = " THEN ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :CASE_THEN)
-    CASE_WHEN = " WHEN ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :CASE_WHEN)
-    CAST_OPEN = 'CAST('.freeze
-    Sequel::Deprecation.deprecate_constant(self, :CAST_OPEN)
-    COLON = ':'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :COLON)
-    COLUMN_REF_RE1 = /\A((?:(?!__).)+)__((?:(?!___).)+)___(.+)\z/.freeze
-    Sequel::Deprecation.deprecate_constant(self, :COLUMN_REF_RE1)
-    COLUMN_REF_RE2 = /\A((?:(?!___).)+)___(.+)\z/.freeze
-    Sequel::Deprecation.deprecate_constant(self, :COLUMN_REF_RE2)
-    COLUMN_REF_RE3 = /\A((?:(?!__).)+)__(.+)\z/.freeze
-    Sequel::Deprecation.deprecate_constant(self, :COLUMN_REF_RE3)
-    COMMA = ', '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :COMMA)
-    COMMA_SEPARATOR = ', '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :COMMA_SEPARATOR)
-    CONDITION_FALSE = '(1 = 0)'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :CONDITION_FALSE)
-    CONDITION_TRUE = '(1 = 1)'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :CONDITION_TRUE)
-    DATASET_ALIAS_BASE_NAME = 't'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :DATASET_ALIAS_BASE_NAME)
-    DATETIME_SECFRACTION_ARG = RUBY_VERSION >= '1.9.0' ? 1000000 : 86400000000
-    Sequel::Deprecation.deprecate_constant(self, :DATETIME_SECFRACTION_ARG)
-    DEFAULT_VALUES = " DEFAULT VALUES".freeze
-    Sequel::Deprecation.deprecate_constant(self, :DEFAULT_VALUES)
-    DELETE = 'DELETE'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :DELETE)
-    DESC = ' DESC'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :DESC)
-    DISTINCT = " DISTINCT".freeze
-    Sequel::Deprecation.deprecate_constant(self, :DISTINCT)
-    DOT = '.'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :DOT)
-    DOUBLE_APOS = "''".freeze
-    Sequel::Deprecation.deprecate_constant(self, :DOUBLE_APOS)
-    DOUBLE_QUOTE = '""'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :DOUBLE_QUOTE)
-    EQUAL = ' = '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :EQUAL)
-    EMPTY_PARENS = '()'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :EMPTY_PARENS)
-    ESCAPE = " ESCAPE ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :ESCAPE)
-    EXTRACT = 'extract('.freeze
-    Sequel::Deprecation.deprecate_constant(self, :EXTRACT)
-    FILTER = " FILTER (WHERE ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :FILTER)
-    FOR_UPDATE = ' FOR UPDATE'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :FOR_UPDATE)
-    FORMAT_DATE = "'%Y-%m-%d'".freeze
-    Sequel::Deprecation.deprecate_constant(self, :FORMAT_DATE)
-    FORMAT_DATE_STANDARD = "DATE '%Y-%m-%d'".freeze
-    Sequel::Deprecation.deprecate_constant(self, :FORMAT_DATE_STANDARD)
-    FORMAT_OFFSET = "%+03i%02i".freeze
-    Sequel::Deprecation.deprecate_constant(self, :FORMAT_OFFSET)
-    FORMAT_TIMESTAMP_RE = /%[Nz]/.freeze
-    Sequel::Deprecation.deprecate_constant(self, :FORMAT_TIMESTAMP_RE)
-    FORMAT_USEC = '%N'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :FORMAT_USEC)
-    FRAME_ALL = "ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING".freeze
-    Sequel::Deprecation.deprecate_constant(self, :FRAME_ALL)
-    FRAME_ROWS = "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW".freeze
-    Sequel::Deprecation.deprecate_constant(self, :FRAME_ROWS)
-    FROM = ' FROM '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :FROM)
-    FUNCTION_DISTINCT = "DISTINCT ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :FUNCTION_DISTINCT)
-    GROUP_BY = " GROUP BY ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :GROUP_BY)
-    HAVING = " HAVING ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :HAVING)
-    INSERT = "INSERT".freeze
-    Sequel::Deprecation.deprecate_constant(self, :INSERT)
-    INTO = " INTO ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :INTO)
-    LATERAL = 'LATERAL '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :LATERAL)
-    LIMIT = " LIMIT ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :LIMIT)
-    NOT_SPACE = 'NOT '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :NOT_SPACE)
-    NULL = "NULL".freeze
-    Sequel::Deprecation.deprecate_constant(self, :NULL)
-    NULLS_FIRST = " NULLS FIRST".freeze
-    Sequel::Deprecation.deprecate_constant(self, :NULLS_FIRST)
-    NULLS_LAST = " NULLS LAST".freeze
-    Sequel::Deprecation.deprecate_constant(self, :NULLS_LAST)
-    OFFSET = " OFFSET ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :OFFSET)
-    ON = ' ON '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :ON)
-    ON_PAREN = " ON (".freeze
-    Sequel::Deprecation.deprecate_constant(self, :ON_PAREN)
-    ORDER_BY = " ORDER BY ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :ORDER_BY)
-    ORDER_BY_NS = "ORDER BY ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :ORDER_BY_NS)
-    OVER = ' OVER '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :OVER)
-    PAREN_CLOSE = ')'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :PAREN_CLOSE)
-    PAREN_OPEN = '('.freeze
-    Sequel::Deprecation.deprecate_constant(self, :PAREN_OPEN)
-    PAREN_SPACE_OPEN = ' ('.freeze
-    Sequel::Deprecation.deprecate_constant(self, :PAREN_SPACE_OPEN)
-    PARTITION_BY = "PARTITION BY ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :PARTITION_BY)
-    QUESTION_MARK = '?'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :QUESTION_MARK)
-    QUESTION_MARK_RE = /\?/.freeze
-    Sequel::Deprecation.deprecate_constant(self, :QUESTION_MARK_RE)
-    QUOTE = '"'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :QUOTE)
-    QUOTE_RE = /"/.freeze
-    Sequel::Deprecation.deprecate_constant(self, :QUOTE_RE)
-    RETURNING = " RETURNING ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :RETURNING)
-    SELECT = 'SELECT'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SELECT)
-    SET = ' SET '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SET)
-    SPACE = ' '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SPACE)
-    SQL_WITH = "WITH ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :SQL_WITH)
-    SPACE_WITH = " WITH ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :SPACE_WITH)
-    TILDE = '~'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :TILDE)
-    TIMESTAMP_FORMAT = "'%Y-%m-%d %H:%M:%S%N%z'".freeze
-    Sequel::Deprecation.deprecate_constant(self, :TIMESTAMP_FORMAT)
-    STANDARD_TIMESTAMP_FORMAT = "TIMESTAMP '%Y-%m-%d %H:%M:%S%N%z'".freeze
-    Sequel::Deprecation.deprecate_constant(self, :STANDARD_TIMESTAMP_FORMAT)
-    UNDERSCORE = '_'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :UNDERSCORE)
-    UPDATE = 'UPDATE'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :UPDATE)
-    USING = ' USING ('.freeze
-    Sequel::Deprecation.deprecate_constant(self, :USING)
-    UNION_ALL_SELECT = ' UNION ALL SELECT '.freeze
-    Sequel::Deprecation.deprecate_constant(self, :UNION_ALL_SELECT)
-    VALUES = " VALUES ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :VALUES)
-    WHERE = " WHERE ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :WHERE)
-    WITH_ORDINALITY = " WITH ORDINALITY".freeze
-    Sequel::Deprecation.deprecate_constant(self, :WITH_ORDINALITY)
-    WITHIN_GROUP = " WITHIN GROUP (ORDER BY ".freeze
-    Sequel::Deprecation.deprecate_constant(self, :WITHIN_GROUP)
 
     [:literal, :quote_identifier, :quote_schema_table].each do |meth|
       class_eval(<<-END, __FILE__, __LINE__ + 1)
@@ -874,9 +680,9 @@ module Sequel
     # Splits table_name into an array of strings.
     #
     #   ds.split_qualifiers(:s) # ['s']
-    #   ds.split_qualifiers(:t__s) # ['t', 's']
-    #   ds.split_qualifiers(Sequel[:d][:t__s]) # ['d', 't', 's']
-    #   ds.split_qualifiers(Sequel[:h__d][:t__s]) # ['h', 'd', 't', 's']
+    #   ds.split_qualifiers(Sequel[:t][:s]) # ['t', 's']
+    #   ds.split_qualifiers(Sequel[:d][:t][:s]) # ['d', 't', 's']
+    #   ds.split_qualifiers(Sequel.qualify(Sequel[:h][:d], Sequel[:t][:s])) # ['h', 'd', 't', 's']
     def split_qualifiers(table_name, *args)
       case table_name
       when SQL::QualifiedIdentifier
@@ -889,9 +695,10 @@ module Sequel
 
     # Append literalization of subscripts (SQL array accesses) to SQL string.
     def subscript_sql_append(sql, s)
-      literal_append(sql, s.f)
+      literal_append(sql, s.expression)
       sql << '['
-      if s.sub.length == 1 && (range = s.sub.first).is_a?(Range)
+      sub = s.sub
+      if sub.length == 1 && (range = sub.first).is_a?(Range)
         literal_append(sql, range.begin)
         sql << ':'
         e = range.end
@@ -1015,25 +822,21 @@ module Sequel
       end
     end
     
-    # Only allow caching the select SQL if the dataset is frozen and hasn't
-    # specifically been marked as not allowing SQL caching.
+    # Don't allow caching SQL if specifically marked not to.
     def cache_sql?
-      frozen? && !@opts[:no_cache_sql] && !cache_get(:_no_cache_sql)
+      !@opts[:no_cache_sql] && !cache_get(:_no_cache_sql)
     end
 
-    # Raise an InvalidOperation exception if deletion is not allowed
-    # for this dataset
+    # Raise an InvalidOperation exception if deletion is not allowed for this dataset.
     def check_modification_allowed!
       raise(InvalidOperation, "Grouped datasets cannot be modified") if opts[:group]
       raise(InvalidOperation, "Joined datasets cannot be modified") if !supports_modifying_joins? && joined_dataset?
     end
 
-    # Emit deprecation warning if the dataset uses limits or offsets.
+    # Raise error if the dataset uses limits or offsets.
     def check_not_limited!(type)
       return if @opts[:skip_limit_check] && type != :truncate
-      # SEQUEL5
-      #raise InvalidOperation, "Dataset##{type} not supported on datasets with limits or offsets" if opts[:limit] || opts[:offset]
-      Sequel::Deprecation.deprecate("Dataset##{type} on datasets with limits or offsets", "Call unlimited to remove the limit #{'or skip_limit_check to ignore the limit ' unless type == :truncate}before calling #{type}") if @opts[:limit] || @opts[:offset]
+      raise InvalidOperation, "Dataset##{type} not supported on datasets with limits or offsets" if opts[:limit] || opts[:offset]
     end
 
     # Alias of check_modification_allowed!
@@ -1042,8 +845,7 @@ module Sequel
     end
 
     # Append column list to SQL string.
-    # Converts an array of column names into a comma seperated string of 
-    # column names. If the array is empty, a wildcard (*) is returned.
+    # If the column list is empty, a wildcard (*) is appended.
     def column_list_append(sql, columns)
       if (columns.nil? || columns.empty?)
         sql << '*'
@@ -1138,7 +940,8 @@ module Sequel
       false
     end
 
-    # Append literalization of array of expressions to SQL string.
+    # Append literalization of array of expressions to SQL string, separating them
+    # with commas.
     def expression_list_append(sql, columns)
       c = false
       co = ', '
@@ -1149,7 +952,7 @@ module Sequel
       end
     end
 
-    # Append literalization of array of grouping elements to SQL string.
+    # Append literalization of array of grouping elements to SQL string, seperating them with commas.
     def grouping_element_list_append(sql, columns)
       c = false
       co = ', '
@@ -1177,7 +980,10 @@ module Sequel
       v2 = db.from_application_timestamp(v)
       fmt = default_timestamp_format.gsub(/%[Nz]/) do |m|
         if m == '%N'
-          format_timestamp_usec(v.is_a?(DateTime) ? v.sec_fraction*(RUBY_VERSION >= '1.9.0' ? 1000000 : 86400000000) : v.usec) if supports_timestamp_usecs?
+          # Ruby 1.9 supports %N in timestamp formats, but Sequel has supported %N
+          # for longer in a different way, where the . is already appended and only 6
+          # decimal places are used by default.
+          format_timestamp_usec(v.is_a?(DateTime) ? v.sec_fraction*(1000000) : v.usec) if supports_timestamp_usecs?
         else
           if supports_timestamp_timezones?
             # Would like to just use %z format, but it doesn't appear to work on Windows
@@ -1407,7 +1213,7 @@ module Sequel
 
     # Append literalization of string to SQL string.
     def literal_string_append(sql, v)
-      sql << "'" << v.gsub(/'/, "''") << "'"
+      sql << "'" << v.gsub("'", "''") << "'"
     end
 
     # Append literalization of symbol to SQL string.
@@ -1471,7 +1277,7 @@ module Sequel
       end
     end
     
-    # Qualify the given expression e to the given table.
+    # Qualify the given expression to the given table.
     def qualified_expression(e, table)
       Qualifier.new(table).transform(e)
     end
@@ -1494,7 +1300,7 @@ module Sequel
 
     # Modify the sql to add a dataset to the via an EXCEPT, INTERSECT, or UNION clause.
     # This uses a subselect for the compound datasets used, because using parantheses doesn't
-    # work on all databases.  I consider this an ugly hack, but can't I think of a better default.
+    # work on all databases.
     def select_compounds_sql(sql)
       return unless c = @opts[:compounds]
       c.each do |type, dataset, all|
@@ -1626,7 +1432,6 @@ module Sequel
     alias insert_with_sql select_with_sql
     alias update_with_sql select_with_sql
     
-    # The base keyword to use for the SQL WITH clause
     def select_with_sql_base
       "WITH "
     end
@@ -1649,7 +1454,7 @@ module Sequel
     end
 
     # The string that is appended to to create the SQL query, the empty
-    # string by default
+    # string by default.
     def sql_string_origin
       String.new
     end
@@ -1680,7 +1485,7 @@ module Sequel
       end
     end
 
-    # Append literalization of the subselect to SQL String.
+    # Append literalization of the subselect to SQL string.
     def subselect_sql_append(sql, ds)
       ds.clone(:append_sql=>sql).sql
     end

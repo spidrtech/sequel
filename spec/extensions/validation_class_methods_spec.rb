@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 model_class = proc do |klass, &block|
   c = Class.new(klass)
@@ -158,7 +158,7 @@ describe Sequel::Model do
     c.must_equal false
     @c.validates{c = respond_to?(:length_of)}
     c.must_equal true
-  end if RUBY_VERSION >= '1.9'
+  end
 end
 
 describe Sequel::Model do
@@ -197,7 +197,7 @@ describe "Sequel::Plugins::ValidationClassMethods::ClassMethods::Generator" do
     @testit = testit = []
     
     @c = model_class.call Sequel::Model do
-      (class << self; self end).send(:define_method, :validates_blah) do
+      singleton_class.send(:define_method, :validates_blah) do
         testit << 1324
       end
     end

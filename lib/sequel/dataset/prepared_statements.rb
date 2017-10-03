@@ -37,23 +37,10 @@ module Sequel
     end
     private_class_method :prepared_statements_module
 
-    def self.def_deprecated_opts_setter(mod, *meths)
-      meths.each do |meth|
-        mod.send(:define_method, :"#{meth}=") do |v|
-          # :nocov:
-          Sequel::Deprecation.deprecate("Dataset##{meth}=", "The API has changed, and this value should now be passed in as an option via Dataset#clone")
-          @opts[meth] = v
-          # :nocov:
-        end
-      end
-    end
-    
     # Default implementation of the argument mapper to allow
     # native database support for bind variables and prepared
     # statements (as opposed to the emulated ones used by default).
     module ArgumentMapper
-      Dataset.def_deprecated_opts_setter(self, :prepared_statement_name, :bind_arguments)
-      
       # The name of the prepared statement, if any.
       def prepared_statement_name
         @opts[:prepared_statement_name]
@@ -89,11 +76,6 @@ module Sequel
     # into the query, which works on all databases, as it is no different
     # from using the dataset without bind variables.
     module PreparedStatementMethods
-      Dataset.def_deprecated_opts_setter(self, :log_sql, :prepared_type, :prepared_args, :orig_dataset, :prepared_modify_values)
-
-      PLACEHOLDER_RE = /\A\$(.*)\z/
-      Sequel::Deprecation.deprecate_constant(self, :PLACEHOLDER_RE)
-      
       # Whether to log the full SQL query.  By default, just the prepared statement
       # name is generally logged on adapters that support native prepared statements.
       def log_sql
@@ -141,6 +123,12 @@ module Sequel
         orig_dataset.columns
       end
       
+      # Disallow use of delayed evaluations in prepared statements.
+      def delayed_evaluation_sql_append(sql, delay)
+        raise Error, "delayed evaluations cannot be used in prepared statements" if @opts[:no_delayed_evaluations]
+        super
+      end
+
       # Returns the SQL for the prepared statement, depending on
       # the type of the statement and the prepared_modify_values.
       def prepared_sql
@@ -188,13 +176,10 @@ module Sequel
       
       protected
       
-      # Run the method based on the type of prepared statement, with
-      # :select running #all to get all of the rows, and the other
-      # types running the method with the same name as the type.
+      # Run the method based on the type of prepared statement.
       def run(&block)
         case prepared_type
         when :select, :all
-          # Most common scenario, so listed first
           all(&block)
         when :each
           each(&block)
@@ -208,18 +193,17 @@ module Sequel
           elsif prepared_type == :delete
             delete
           else
-            send(prepared_type, *prepared_modify_values)
+            public_send(prepared_type, *prepared_modify_values)
           end
         when :insert_pk
           fetch_rows(prepared_sql){|r| return r.values.first}
         when Array
           case prepared_type[0]
           when :map, :as_hash, :to_hash, :to_hash_groups
-            send(*prepared_type, &block) 
+            public_send(*prepared_type, &block) 
           end
         else
-          Sequel::Deprecation.deprecate("Using an unsupported prepared statement type (#{prepared_type.inspect})", 'Switch to using :select as the prepared statement type')
-          all(&block)
+          raise Error, "unsupported prepared statement type used: #{prepared_type.inspect}"
         end
       end
       
@@ -235,8 +219,7 @@ module Sequel
         @opts[:bind_vars].has_key?(k)
       end
 
-      # The symbol cache should always be skipped, since placeholders
-      # are symbols.
+      # The symbol cache should always be skipped, since placeholders are symbols.
       def skip_symbol_cache?
         true
       end
@@ -286,7 +269,7 @@ module Sequel
     # already been set for this dataset, they are updated with the contents
     # of bind_vars.
     #
-    #   DB[:table].where(:id=>:$id).bind(:id=>1).call(:first)
+    #   DB[:table].where(id: :$id).bind(id: 1).call(:first)
     #   # SELECT * FROM table WHERE id = ? LIMIT 1 -- (1)
     #   # => {:id=>1}
     def bind(bind_vars={})
@@ -307,7 +290,7 @@ module Sequel
     # run the sql with the bind variables specified in the hash.  +values+ is a hash passed to
     # insert or update (if one of those types is used), which may contain placeholders.
     #
-    #   DB[:table].where(:id=>:$id).call(:first, :id=>1)
+    #   DB[:table].where(id: :$id).call(:first, id: 1)
     #   # SELECT * FROM table WHERE id = ? LIMIT 1 -- (1)
     #   # => {:id=>1}
     def call(type, bind_variables={}, *values, &block)
@@ -315,36 +298,25 @@ module Sequel
     end
     
     # Prepare an SQL statement for later execution.  Takes a type similar to #call,
-    # and the +name+ symbol of the prepared statement.  While +name+ defaults to +nil+,
-    # it should always be provided as a symbol for the name of the prepared statement,
-    # as some databases require that prepared statements have names.
+    # and the +name+ symbol of the prepared statement.
     #
     # This returns a clone of the dataset extended with PreparedStatementMethods,
     # which you can +call+ with the hash of bind variables to use.
     # The prepared statement is also stored in
-    # the associated database, where it can be called by name.
+    # the associated Database, where it can be called by name.
     # The following usage is identical:
     #
-    #   ps = DB[:table].where(:name=>:$name).prepare(:first, :select_by_name)
+    #   ps = DB[:table].where(name: :$name).prepare(:first, :select_by_name)
     #
-    #   ps.call(:name=>'Blah')
+    #   ps.call(name: 'Blah')
     #   # SELECT * FROM table WHERE name = ? -- ('Blah')
     #   # => {:id=>1, :name=>'Blah'}
     #
-    #   DB.call(:select_by_name, :name=>'Blah') # Same thing
-    def prepare(type, name=nil, *values)
-      ps = to_prepared_statement(type, values, :name=>name, :extend=>prepared_statement_modules)
-
-      if name
-        ps.prepared_sql
-        db.set_prepared_statement(name, ps)
-      else
-        # :nocov:
-        # SEQUEL5: Add coverage
-        Sequel::Deprecation.deprecate("Dataset#prepare will change to requiring a name argument in Sequel 5, please update your code") unless name
-        # :nocov:
-      end
-
+    #   DB.call(:select_by_name, name: 'Blah') # Same thing
+    def prepare(type, name, *values)
+      ps = to_prepared_statement(type, values, :name=>name, :extend=>prepared_statement_modules, :no_delayed_evaluations=>true)
+      ps.prepared_sql
+      db.set_prepared_statement(name, ps)
       ps
     end
     
@@ -357,7 +329,7 @@ module Sequel
       mods += [PreparedStatementMethods]
 
       bind.
-        clone(:prepared_statement_name=>opts[:name], :prepared_type=>type, :prepared_modify_values=>values, :orig_dataset=>self, :no_cache_sql=>true, :prepared_args=>@opts[:prepared_args]||[]).
+        clone(:prepared_statement_name=>opts[:name], :prepared_type=>type, :prepared_modify_values=>values, :orig_dataset=>self, :no_cache_sql=>true, :prepared_args=>@opts[:prepared_args]||[], :no_delayed_evaluations=>opts[:no_delayed_evaluations]).
         with_extend(*mods)
     end
 

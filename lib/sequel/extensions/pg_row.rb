@@ -64,12 +64,12 @@
 #
 # You can also use a hash:
 #
-#   DB.row_type(:address, :street=>'123 Sesame St.', :city=>'Some City', :zip=>'12345')
+#   DB.row_type(:address, street: '123 Sesame St.', city: 'Some City', zip: '12345')
 #
 # So if you have a person table that has an address column, here's how you
 # could insert into the column:
 #
-#   DB[:table].insert(:address=>DB.row_type(:address, :street=>'123 Sesame St.', :city=>'Some City', :zip=>'12345'))
+#   DB[:table].insert(address: DB.row_type(:address, street: '123 Sesame St.', city: 'Some City', zip: '12345'))
 #
 # Note that registering row types without providing an explicit :converter option
 # creates anonymous classes.  This results in ruby being unable to Marshal such
@@ -88,16 +88,10 @@
 
 require 'delegate'
 require 'strscan'
-Sequel.require 'adapters/shared/postgres'
 
 module Sequel
   module Postgres
     module PGRow
-      ROW = 'ROW'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :ROW)
-      CAST = '::'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CAST)
-
       # Class for row-valued/composite types that are treated as arrays. By default,
       # this is only used for generic PostgreSQL record types, as registered
       # types use HashRow by default.
@@ -216,7 +210,7 @@ module Sequel
         end
       end
 
-      ROW_TYPE_CLASSES = [HashRow, ArrayRow]#.freeze # SEQUEL5
+      ROW_TYPE_CLASSES = [HashRow, ArrayRow].freeze
 
       # This parser-like class splits the PostgreSQL
       # row-valued/composite type output string format
@@ -225,25 +219,6 @@ module Sequel
       # will accept, it only handles the output format that
       # PostgreSQL uses.
       class Splitter < StringScanner
-        OPEN_PAREN = /\(/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :OPEN_PAREN)
-        CLOSE_PAREN = /\)/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :CLOSE_PAREN)
-        UNQUOTED_RE = /[^,)]*/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :UNQUOTED_RE)
-        SEP_RE = /[,)]/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :SEP_RE)
-        QUOTE_RE = /"/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :QUOTE_RE)
-        QUOTE_SEP_RE = /"[,)]/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :QUOTE_SEP_RE)
-        QUOTED_RE = /(\\.|""|[^"])*/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :QUOTED_RE)
-        REPLACE_RE = /\\(.)|"(")/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :REPLACE_RE)
-        REPLACE_WITH = '\1\2'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :REPLACE_WITH)
-
         # Split the stored string into an array of strings, handling
         # the different types of quoting.
         def parse
@@ -387,13 +362,6 @@ module Sequel
       end
 
       module DatabaseMethods
-        ESCAPE_RE = /("|\\)/.freeze
-        Sequel::Deprecation.deprecate_constant(self, :ESCAPE_RE)
-        ESCAPE_REPLACEMENT = '\\\\\1'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :ESCAPE_REPLACEMENT)
-        COMMA = ','.freeze
-        Sequel::Deprecation.deprecate_constant(self, :COMMA)
-
         # A hash mapping row type keys (usually symbols), to option
         # hashes.  At the least, the values will contain the :parser
         # option for the Parser instance that the type will use.
@@ -401,7 +369,7 @@ module Sequel
 
         # Do some setup for the data structures the module uses.
         def self.extended(db)
-          db.instance_eval do
+          db.instance_exec do
             @row_types = {}
             @row_schema_types = {}
             extend(@row_type_method_module = Module.new)
@@ -432,8 +400,6 @@ module Sequel
           @row_type_method_module.freeze
           super
         end
-
-        STRING_TYPES = [18, 19, 25, 1042, 1043].freeze
 
         # Register a new row type for the Database instance. db_type should be the type
         # symbol.  This parses the PostgreSQL system tables to get information the
@@ -487,23 +453,7 @@ module Sequel
 
           # Using the conversion_procs, lookup converters for each member of the composite type
           parser_opts[:column_converters] = parser_opts[:column_oids].map do |oid|
-            # procs[oid] # SEQUEL5
-
-            # SEQUEL5: Remove
-            if pr = procs[oid]
-              pr
-            elsif !STRING_TYPES.include?(oid)
-              # It's not a string type, and it's possible a conversion proc for this
-              # oid will be added later, so do a runtime check for it.
-              lambda do |s|
-                if (pr = procs[oid])
-                  Sequel::Deprecation.deprecate("Calling conversion proc for subtype (oid: #{oid}) of composite type (oid: #{parser_opts[:oid]}) not added until after composite type registration", "Register subtype conversion procs before registering composite type")
-                  pr.call(s)
-                else
-                  s
-                end
-              end
-            end
+            procs[oid]
           end
 
           # Setup the converter and typecaster
@@ -533,19 +483,7 @@ module Sequel
             private meth
           end
 
-          conversion_procs_updated # SEQUEL5: Remove
           nil
-        end
-
-        # SEQUEL5: Remove
-        def reset_conversion_procs
-          procs = super
-
-          row_types.values.each do |opts|
-            register_row_type(opts[:type], opts)
-          end
-
-          procs
         end
 
         # Handle typecasting of the given object to the given database type.
@@ -601,16 +539,6 @@ module Sequel
           end
         end
       end
-    end
-
-    # SEQUEL5: Remove
-    parser = PGRow::Parser.new(:converter=>PGRow::ArrayRow)
-    PG__TYPES[2249] = lambda do |s|
-      Sequel::Deprecation.deprecate("Conversion proc for record added globally by pg_row extension", "Load the pg_row extension into the Database instance")
-      parser.call(s)
-    end
-    if defined?(PGArray) && PGArray.respond_to?(:register)
-      PGArray.register('record', :oid=>2287, :scalar_oid=>2249, :skip_deprecation_warning=>true)
     end
   end
 

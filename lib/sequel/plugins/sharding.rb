@@ -5,10 +5,9 @@ module Sequel
     # The sharding plugin augments Sequel's default model sharding support
     # in the following ways:
     #
-    # * It automatically sets model instances to be saved back to the
+    # * It automatically saves model instances back to the
     #   shard they were retreived from.
-    # * It makes model associations use the same shard as the model
-    #   object.
+    # * It makes model associations use the same shard as the model object.
     # * It adds a slightly nicer API for creating model instances on
     #   specific shards.
     # 
@@ -81,11 +80,6 @@ module Sequel
         # Don't use an associated object loader, as it won't respect the shard used.
         def _associated_object_loader(opts, dynamic_opts)
           nil
-        end
-
-        # Mark that associated objects should use the same server.
-        def _associated_objects_use_same_server?
-          true
         end
 
         # Ensure that the join table for many_to_many associations uses the correct shard.

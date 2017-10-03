@@ -20,7 +20,7 @@ module Sequel
       # Modify the current model's dataset selection, if the model
       # has a dataset.
       def self.configure(model)
-        model.instance_eval do
+        model.instance_exec do
           self.dataset = dataset if @dataset
         end
       end
@@ -32,7 +32,7 @@ module Sequel
         # has no explicit selection, select table.* from that table.
         def convert_input_dataset(ds)
           ds = super
-          if !ds.opts[:select] && (from = ds.opts[:from]) && from.length == 1 && !ds.opts[:join] # SEQUEL5: Only !ds.opts[:select]
+          unless ds.opts[:select]
             ds = ds.select_all(ds.first_source)
           end
           ds

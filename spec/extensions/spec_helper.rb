@@ -1,8 +1,7 @@
-require 'rubygems'
-require "#{File.dirname(File.dirname(__FILE__))}/sequel_warning.rb"
+require_relative "../sequel_warning"
 
 if ENV['COVERAGE']
-  require File.join(File.dirname(File.expand_path(__FILE__)), "../sequel_coverage")
+  require_relative "../sequel_coverage"
   SimpleCov.sequel_coverage(:filter=>%r{lib/sequel/(extensions|plugins)/\w+\.rb\z})
 end
 
@@ -11,12 +10,10 @@ require 'minitest/autorun'
 require 'minitest/hooks/default'
 require 'minitest/shared_description'
 
-unless Object.const_defined?('Sequel') && Sequel.const_defined?('Model')
-  $:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../../lib/"))
-  require 'sequel'
-end
+$:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../../lib/"))
+require_relative "../../lib/sequel"
 
-require "#{File.dirname(File.dirname(__FILE__))}/deprecation_helper.rb"
+require_relative '../deprecation_helper'
 
 begin
   # Attempt to load ActiveSupport blank extension and inflector first, so Sequel
@@ -29,25 +26,6 @@ rescue LoadError
 end
 
 Sequel.extension :core_refinements if RUBY_VERSION >= '2.0.0' && RUBY_ENGINE == 'ruby'
-
-def skip_warn(s)
-  warn "Skipping test of #{s}" if ENV["SKIPPED_TEST_WARN"]
-end
-
-class Minitest::HooksSpec
-  # SEQUEL5: Replace with define_singleton_method
-  def meta_def(obj, name, &block)
-    (class << obj; self end).send(:define_method, name, &block)
-  end
-end
-
-# SEQUEL5: Remove
-output = Sequel::Deprecation.output
-Sequel::Deprecation.output = nil
-Sequel.quote_identifiers = false
-Sequel.identifier_input_method = nil
-Sequel.identifier_output_method = nil
-Sequel::Deprecation.output = output
 
 class << Sequel::Model
   attr_writer :db_schema

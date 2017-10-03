@@ -1,6 +1,6 @@
 SEQUEL_ADAPTER_TEST = :oracle
 
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
+require_relative 'spec_helper'
 
 unless DB.opts[:autosequence]
   warn "Running oracle adapter specs without :autosequence Database option results in many errors, use the :autosequence Database option when testing"
@@ -309,13 +309,5 @@ describe "An Oracle database" do
     ]
 
     DB[:books].select(:title).group_by(:title).count.must_equal 2
-  end
-
-  it "#for_update should use FOR UPDATE" do
-    DB[:books].for_update.sql.must_equal 'SELECT * FROM "BOOKS" FOR UPDATE'
-  end
-
-  it "#lock_style should accept symbols" do
-    DB[:books].lock_style(:update).sql.must_equal 'SELECT * FROM "BOOKS" FOR UPDATE'
   end
 end

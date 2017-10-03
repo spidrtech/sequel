@@ -30,15 +30,15 @@ module Sequel
     # dataset supports RETURNING.
     #
     #   # Only include the artist column in RETURNING
-    #   Album.plugin :update_refresh, :columns => :artist
+    #   Album.plugin :update_refresh, columns: :artist
     #
     #   # Only include the artist and title columns in RETURNING
-    #   Album.plugin :update_refresh, :columns => [ :artist, :title ]
+    #   Album.plugin :update_refresh, columns: [:artist, :title]
     module UpdateRefresh
       # Set the specific columns to refresh, if the :columns option
       # is provided.
       def self.configure(model, opts=OPTS)
-        model.instance_eval do
+        model.instance_exec do
           @update_refresh_columns = Array(opts[:columns]) || []
         end
       end

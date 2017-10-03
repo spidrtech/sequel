@@ -1,8 +1,8 @@
 # frozen-string-literal: true
 
 Sequel::JDBC.load_driver('Java::oracle.jdbc.driver.OracleDriver')
-Sequel.require 'adapters/shared/oracle'
-Sequel.require 'adapters/jdbc/transactions'
+require_relative '../shared/oracle'
+require_relative 'transactions'
 
 module Sequel
   module JDBC
@@ -14,23 +14,6 @@ module Sequel
       end
     end
 
-    # SEQUEL5: Remove
-    class Type_Convertor
-      JAVA_BIG_DECIMAL_CONSTRUCTOR = java.math.BigDecimal.java_class.constructor(Java::long).method(:new_instance)
-
-      def OracleDecimal(r, i)
-        if v = r.getBigDecimal(i)
-          i = v.long_value
-          if v == JAVA_BIG_DECIMAL_CONSTRUCTOR.call(i)
-            i
-          else
-            BigDecimal.new(v.to_string)
-          end
-        end
-      end 
-    end
-
-    # Database and Dataset support for Oracle databases accessed via JDBC.
     module Oracle
       JAVA_BIG_DECIMAL_CONSTRUCTOR = java.math.BigDecimal.java_class.constructor(Java::long).method(:new_instance)
 
@@ -45,16 +28,12 @@ module Sequel
         end
       end 
 
-      # Instance methods for Oracle Database objects accessed via JDBC.
       module DatabaseMethods
-        PRIMARY_KEY_INDEX_RE = /\Asys_/i.freeze
-        Sequel::Deprecation.deprecate_constant(self, :PRIMARY_KEY_INDEX_RE)
-
         include Sequel::Oracle::DatabaseMethods
         include Sequel::JDBC::Transactions
 
         def self.extended(db)
-          db.instance_eval do
+          db.instance_exec do
             @autosequence = opts[:autosequence]
             @primary_key_sequences = {}
           end
@@ -128,13 +107,12 @@ module Sequel
         end
       end
       
-      # Dataset class for Oracle datasets accessed via JDBC.
       class Dataset < JDBC::Dataset
         include Sequel::Oracle::DatasetMethods
 
         NUMERIC_TYPE = Java::JavaSQL::Types::NUMERIC
         TIMESTAMP_TYPE = Java::JavaSQL::Types::TIMESTAMP
-        TIMESTAMPTZ_TYPES = [Java::oracle.jdbc.OracleTypes::TIMESTAMPTZ, Java::oracle.jdbc.OracleTypes::TIMESTAMPLTZ]#.freeze # SEQUEL5
+        TIMESTAMPTZ_TYPES = [Java::oracle.jdbc.OracleTypes::TIMESTAMPTZ, Java::oracle.jdbc.OracleTypes::TIMESTAMPLTZ].freeze
 
         def type_convertor(map, meta, type, i)
           case type

@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 connection_validator_specs = shared_description do
   describe "connection validator" do
@@ -114,13 +114,13 @@ end
 
 describe "Sequel::ConnectionValidator with threaded pool" do
   before do
-    @db = Sequel.mock
+    @db = Sequel.mock(:test=>false)
   end
   include connection_validator_specs
 end
 describe "Sequel::ConnectionValidator with sharded threaded pool" do
   before do
-    @db = Sequel.mock(:servers=>{})
+    @db = Sequel.mock(:test=>false, :servers=>{})
   end
   include connection_validator_specs
 end

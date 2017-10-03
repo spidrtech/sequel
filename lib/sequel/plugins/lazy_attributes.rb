@@ -13,7 +13,7 @@ module Sequel
     # get the reviews for all of those albums:
     #
     #   Album.plugin :lazy_attributes, :review
-    #   Album.where{id<100}.all do |a|
+    #   Album.where{id < 100}.all do |a|
     #     a.review
     #   end
     #
@@ -38,15 +38,6 @@ module Sequel
       end
       
       module ClassMethods
-        def lazy_attributes_module
-          Sequel::Deprecation.deprecate('Sequel::Model.lazy_attributes_module', 'There is no replacement')
-          @lazy_attributes_module
-        end
-        def lazy_attributes_module=(v)
-          Sequel::Deprecation.deprecate('Sequel::Model.lazy_attributes_module=', 'There is no replacement')
-          @lazy_attributes_module= v
-        end
-
         # Freeze lazy attributes module when freezing model class.
         def freeze
           @lazy_attributes_module.freeze if @lazy_attributes_module

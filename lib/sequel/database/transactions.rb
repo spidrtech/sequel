@@ -9,30 +9,10 @@ module Sequel
     # them do.
     # ---------------------
 
-    SQL_BEGIN = 'BEGIN'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SQL_BEGIN)
-    SQL_COMMIT = 'COMMIT'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SQL_COMMIT)
-    SQL_RELEASE_SAVEPOINT = 'RELEASE SAVEPOINT autopoint_%d'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SQL_RELEASE_SAVEPOINT)
-    SQL_ROLLBACK = 'ROLLBACK'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SQL_ROLLBACK)
-    SQL_ROLLBACK_TO_SAVEPOINT = 'ROLLBACK TO SAVEPOINT autopoint_%d'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SQL_ROLLBACK_TO_SAVEPOINT)
-    SQL_SAVEPOINT = 'SAVEPOINT autopoint_%d'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :SQL_SAVEPOINT)
-    
-    TRANSACTION_BEGIN = 'Transaction.begin'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_BEGIN)
-    TRANSACTION_COMMIT = 'Transaction.commit'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_COMMIT)
-    TRANSACTION_ROLLBACK = 'Transaction.rollback'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :TRANSACTION_ROLLBACK)
-
     TRANSACTION_ISOLATION_LEVELS = {:uncommitted=>'READ UNCOMMITTED'.freeze,
       :committed=>'READ COMMITTED'.freeze,
       :repeatable=>'REPEATABLE READ'.freeze,
-      :serializable=>'SERIALIZABLE'.freeze}#.freeze # SEQUEL5
+      :serializable=>'SERIALIZABLE'.freeze}.freeze
     
     # The default transaction isolation level for this database,
     # used for all future transactions.  For MSSQL, this should be set
@@ -284,7 +264,7 @@ module Sequel
       hooks << block
     end
 
-    # Whether the current thread/connection is already inside a transaction
+    # Whether the given connection is already inside a transaction
     def already_in_transaction?(conn, opts)
       _trans(conn) && (!supports_savepoints? || !opts[:savepoint])
     end
@@ -305,7 +285,7 @@ module Sequel
       "SAVEPOINT autopoint_#{depth}"
     end
 
-    # Start a new database connection on the given connection
+    # Start a new database transaction on the given connection
     def begin_new_transaction(conn, opts)
       log_connection_execute(conn, begin_transaction_sql)
       set_transaction_isolation(conn, opts)
@@ -332,7 +312,7 @@ module Sequel
     # Whether to commit the current transaction. Thread.current.status is
     # checked because Thread#kill skips rescue blocks (so exception would be
     # nil), but the transaction should still be rolled back. On Ruby 1.9 (but
-    # not 1.8 or 2.0), the thread status will still be "run", so Thread#kill
+    # not 2.0+), the thread status will still be "run", so Thread#kill
     # will erroneously commit the transaction, and there isn't a workaround.
     def commit_or_rollback_transaction(exception, conn, opts)
       if exception

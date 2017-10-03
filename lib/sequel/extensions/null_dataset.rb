@@ -13,7 +13,7 @@
 #
 # Usage:
 #
-#   ds = DB[:items].nullify.where(:a=>:b).select(:c)
+#   ds = DB[:items].nullify.where(a: :b).select(:c)
 #   ds.sql # => "SELECT c FROM items WHERE (a = b)"
 #   ds.all # => [] # no query sent to the database
 #
@@ -41,13 +41,7 @@ module Sequel
     module Nullifiable
       # Return a cloned nullified dataset.
       def nullify
-        clone.with_extend(NullDataset)
-      end
-
-      # Nullify the current dataset
-      def nullify!
-        Sequel::Deprecation.deprecate("Dataset#nullify! from the null_dataset extension", "Use Dataset#nullify, which returned a modified copy")
-        extend NullDataset
+        with_extend(NullDataset)
       end
     end
 

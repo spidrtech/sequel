@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe "Sequel::Plugins::EagerEach" do
   before do
@@ -57,6 +57,6 @@ describe "Sequel::Plugins::EagerEach" do
   end
 
   it "should not attempt to eager load when getting the columns" do
-    ds = @c.eager(:children).with_extend{def all; raise; end}.columns!.must_equal [:id, :parent_id]
+    @c.eager(:children).with_extend{def all; raise; end}.columns!.must_equal [:id, :parent_id]
   end
 end

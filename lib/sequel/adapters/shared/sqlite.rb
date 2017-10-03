@@ -1,13 +1,14 @@
 # frozen-string-literal: true
 
-Sequel.require %w'replace unmodified_identifiers', 'adapters/utils'
+require_relative '../utils/replace'
+require_relative '../utils/unmodified_identifiers'
 
 module Sequel
   module SQLite
     Sequel::Database.set_shared_adapter_scheme(:sqlite, self)
 
     def self.mock_adapter_setup(db)
-      db.instance_eval do
+      db.instance_exec do
         @sqlite_version = 30903
       end
     end
@@ -17,13 +18,6 @@ module Sequel
     # :auto_vacuum, :foreign_keys, :synchronous, and :temp_store.
     module DatabaseMethods
       include UnmodifiedIdentifiers::DatabaseMethods
-
-      PRIMARY_KEY_INDEX_RE = /\Asqlite_autoindex_/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PRIMARY_KEY_INDEX_RE)
-      TABLES_FILTER = Sequel.~(:name=>'sqlite_sequence'.freeze) & {:type => 'table'.freeze}
-      Sequel::Deprecation.deprecate_constant(self, :TABLES_FILTER)
-      VIEWS_FILTER = {:type => 'view'.freeze}.freeze
-      Sequel::Deprecation.deprecate_constant(self, :VIEWS_FILTER)
 
       AUTO_VACUUM = [:none, :full, :incremental].freeze
       SYNCHRONOUS = [:off, :normal, :full].freeze
@@ -56,46 +50,6 @@ module Sequel
         :sqlite
       end
       
-      # SEQUEL5: Remove
-      def auto_vacuum
-        AUTO_VACUUM[pragma_get(:auto_vacuum).to_i]
-      end
-      def auto_vacuum=(value)
-        value = AUTO_VACUUM.index(value) || (raise Error, "Invalid value for auto_vacuum option. Please specify one of :none, :full, :incremental.")
-        pragma_set(:auto_vacuum, value)
-      end
-      def case_sensitive_like=(value)
-        pragma_set(:case_sensitive_like, !!value ? 'on' : 'off') if sqlite_version >= 30203
-      end
-      def foreign_keys
-        pragma_get(:foreign_keys).to_i == 1 if sqlite_version >= 30619
-      end
-      def foreign_keys=(value)
-        pragma_set(:foreign_keys, !!value ? 'on' : 'off') if sqlite_version >= 30619
-      end
-      def pragma_get(name)
-        Sequel::Deprecation.deprecate('Database#{pragma_get,auto_vacuum,case_sensitive_like,foreign_keys,synchronous,temp_store} on SQLite', "These methods may not be safe when using multiple connections, call fetch(#{"PRAGMA #{name}".inspect}).single_value if you really want to get the pragma value")
-        self["PRAGMA #{name}"].single_value
-      end
-      def pragma_set(name, value)
-        Sequel::Deprecation.deprecate('Database#{pragma_set,auto_vacuum=,case_sensitive_like=,foreign_keys=,synchronous=,temp_store=} on SQLite', "These methods are not thread safe or safe when using multiple connections, pass the appropriate option when connecting to set the pragma correctly for all connections")
-        execute_ddl("PRAGMA #{name} = #{value}")
-      end
-      def synchronous
-        SYNCHRONOUS[pragma_get(:synchronous).to_i]
-      end
-      def synchronous=(value)
-        value = SYNCHRONOUS.index(value) || (raise Error, "Invalid value for synchronous option. Please specify one of :off, :normal, :full.")
-        pragma_set(:synchronous, value)
-      end
-      def temp_store
-        TEMP_STORE[pragma_get(:temp_store).to_i]
-      end
-      def temp_store=(value)
-        value = TEMP_STORE.index(value) || (raise Error, "Invalid value for temp_store option. Please specify one of :default, :file, :memory.")
-        pragma_set(:temp_store, value)
-      end
-
       # Set the integer_booleans option using the passed in :integer_boolean option.
       def set_integer_booleans
         @integer_booleans = @opts.has_key?(:integer_booleans) ? typecast_value_boolean(@opts[:integer_booleans]) : true
@@ -203,7 +157,7 @@ module Sequel
       # Creates a dataset that uses the VALUES clause:
       #
       #   DB.values([[1, 2], [3, 4]])
-      #   VALUES ((1, 2), (3, 4))
+      #   # VALUES ((1, 2), (3, 4))
       def values(v)
         @default_dataset.clone(:values=>v)
       end
@@ -527,7 +481,6 @@ module Sequel
       end
     end
     
-    # Instance methods for datasets that connect to an SQLite database
     module DatasetMethods
       include Dataset::Replace
       include UnmodifiedIdentifiers::DatasetMethods
@@ -535,50 +488,9 @@ module Sequel
       # The allowed values for insert_conflict
       INSERT_CONFLICT_RESOLUTIONS = %w'ROLLBACK ABORT FAIL IGNORE REPLACE'.each(&:freeze).freeze
 
-      CONSTANT_MAP = {:CURRENT_DATE=>"date(CURRENT_TIMESTAMP, 'localtime')".freeze, :CURRENT_TIMESTAMP=>"datetime(CURRENT_TIMESTAMP, 'localtime')".freeze, :CURRENT_TIME=>"time(CURRENT_TIMESTAMP, 'localtime')".freeze}#.freeze # SEQUEL5
-      EXTRACT_MAP = {:year=>"'%Y'", :month=>"'%m'", :day=>"'%d'", :hour=>"'%H'", :minute=>"'%M'", :second=>"'%f'"}#.freeze # SEQUEL5
-      #EXTRACT_MAP.each_value(&:freeze) # SEQUEL5
-
-      NOT_SPACE = 'NOT '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :NOT_SPACE)
-      COMMA = ', '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA)
-      PAREN_CLOSE = ')'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PAREN_CLOSE)
-      AS = ' AS '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :AS)
-      APOS = "'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS)
-      EXTRACT_OPEN = "CAST(strftime(".freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXTRACT_OPEN)
-      EXTRACT_CLOSE = ') AS '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXTRACT_CLOSE)
-      NUMERIC = 'NUMERIC'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :NUMERIC)
-      INTEGER = 'INTEGER'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :INTEGER)
-      BACKTICK = '`'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKTICK)
-      BACKTICK_RE = /`/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKTICK_RE)
-      DOUBLE_BACKTICK = '``'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_BACKTICK)
-      BLOB_START = "X'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :BLOB_START)
-      HSTAR = "H*".freeze
-      Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-      DATE_OPEN = "date(".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATE_OPEN)
-      DATETIME_OPEN = "datetime(".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATETIME_OPEN)
-      ONLY_OFFSET = " LIMIT -1 OFFSET ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ONLY_OFFSET)
-      OR = " OR ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :OR)
-      SELECT_VALUES = "VALUES ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SELECT_VALUES)
-      EMULATED_FUNCTION_MAP = {:char_length=>'length'.freeze}
-      Sequel::Deprecation.deprecate_constant(self, :EMULATED_FUNCTION_MAP)
+      CONSTANT_MAP = {:CURRENT_DATE=>"date(CURRENT_TIMESTAMP, 'localtime')".freeze, :CURRENT_TIMESTAMP=>"datetime(CURRENT_TIMESTAMP, 'localtime')".freeze, :CURRENT_TIME=>"time(CURRENT_TIMESTAMP, 'localtime')".freeze}.freeze
+      EXTRACT_MAP = {:year=>"'%Y'", :month=>"'%m'", :day=>"'%d'", :hour=>"'%H'", :minute=>"'%M'", :second=>"'%f'"}.freeze
+      EXTRACT_MAP.each_value(&:freeze)
 
       Dataset.def_sql_method(self, :delete, [['if db.sqlite_version >= 30803', %w'with delete from where'], ["else", %w'delete from where']])
       Dataset.def_sql_method(self, :insert, [['if db.sqlite_version >= 30803', %w'with insert conflict into columns values'], ["else", %w'insert conflict into columns values']])
@@ -600,7 +512,7 @@ module Sequel
       end
 
       # SQLite doesn't support a NOT LIKE b, you need to use NOT (a LIKE b).
-      # It doesn't support xor or the extract function natively, so those have to be emulated.
+      # It doesn't support xor, power, or the extract function natively, so those have to be emulated.
       def complex_expression_sql_append(sql, op, args)
         case op
         when :"NOT LIKE", :"NOT ILIKE"
@@ -703,15 +615,14 @@ module Sequel
       #
       # Examples:
       #
-      #   DB[:table].insert_conflict.insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict.insert(a: 1, b: 2)
       #   # INSERT OR IGNORE INTO TABLE (a, b) VALUES (1, 2)
       #
-      #   DB[:table].insert_conflict(:replace).insert(:a=>1, :b=>2)
+      #   DB[:table].insert_conflict(:replace).insert(a: 1, b: 2)
       #   # INSERT OR REPLACE INTO TABLE (a, b) VALUES (1, 2)
       def insert_conflict(resolution = :ignore)
         unless INSERT_CONFLICT_RESOLUTIONS.include?(resolution.to_s.upcase)
-          Sequel::Deprecation.deprecate("Passing #{resolution.inspect} argument to Dataset#insert_conflict", "The allowed values are: :rollback, :abort, :fail, :ignore, or :replace")
-          # raise Error, "Invalid value passed to Dataset#insert_conflict: #{resolution.inspect}.  The allowed values are: :rollback, :abort, :fail, :ignore, or :replace"
+          raise Error, "Invalid value passed to Dataset#insert_conflict: #{resolution.inspect}.  The allowed values are: :rollback, :abort, :fail, :ignore, or :replace"
         end
         clone(:insert_conflict => resolution)
       end
@@ -719,7 +630,7 @@ module Sequel
       # Ignore uniqueness/exclusion violations when inserting, using INSERT OR IGNORE.
       # Exists mostly for compatibility to MySQL's insert_ignore. Example:
       #
-      #   DB[:table].insert_ignore.insert(:a=>1, :b=>2)
+      #   DB[:table].insert_ignore.insert(a: 1, b: 2)
       #   # INSERT OR IGNORE INTO TABLE (a, b) VALUES (1, 2)
       def insert_ignore
         insert_conflict(:ignore)

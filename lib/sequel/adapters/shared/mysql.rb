@@ -1,105 +1,37 @@
 # frozen-string-literal: true
 
-Sequel.require %w'replace split_alter_table unmodified_identifiers', 'adapters/utils'
+require_relative '../utils/replace'
+require_relative '../utils/split_alter_table'
+require_relative '../utils/unmodified_identifiers'
 
 module Sequel
   module MySQL
     Sequel::Database.set_shared_adapter_scheme(:mysql, self)
 
     def self.mock_adapter_setup(db)
-      db.instance_eval do
+      db.instance_exec do
         @server_version = 50617
       end
     end
 
-    # SEQUEL5: Remove
-    @convert_tinyint_to_bool = true
-    @default_charset = nil
-    @default_collate = nil
-    @default_engine = nil
-    class << self
-      def convert_tinyint_to_bool
-        Sequel::Deprecation.deprecate("Sequel::MySQL.convert_tinyint_to_bool", "Call this method on the Database instance")
-        @convert_tinyint_to_bool
-      end
-      def convert_tinyint_to_bool=(v)
-        Sequel::Deprecation.deprecate("Sequel::MySQL.convert_tinyint_to_bool=", "Call this method on the Database instance")
-        @convert_tinyint_to_bool = v
-      end
-
-      def default_charset
-        Sequel::Deprecation.deprecate("Sequel::MySQL.default_charset", "Call this method on the Database instance")
-        @default_charset
-      end
-      def default_charset=(v)
-        Sequel::Deprecation.deprecate("Sequel::MySQL.default_charset=", "Call this method on the Database instance")
-        @default_charset = v
-      end
-
-      def default_collate
-        Sequel::Deprecation.deprecate("Sequel::MySQL.default_collate", "Call this method on the Database instance")
-        @default_collate
-      end
-      def default_collate=(v)
-        Sequel::Deprecation.deprecate("Sequel::MySQL.default_collate=", "Call this method on the Database instance")
-        @default_collate = v
-      end
-
-      def default_engine
-        Sequel::Deprecation.deprecate("Sequel::MySQL.default_engine", "Call this method on the Database instance")
-        @default_engine
-      end
-      def default_engine=(v)
-        Sequel::Deprecation.deprecate("Sequel::MySQL.default_engine=", "Call this method on the Database instance")
-        @default_engine = v
-      end
-    end
-
-    # Methods shared by Database instances that connect to MySQL,
-    # currently supported by the native and JDBC adapters.
     module DatabaseMethods
       include UnmodifiedIdentifiers::DatabaseMethods
       include Sequel::Database::SplitAlterTable
 
-      AUTO_INCREMENT = 'AUTO_INCREMENT'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :AUTO_INCREMENT)
-      PRIMARY = 'PRIMARY'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PRIMARY)
-      MYSQL_TIMESTAMP_RE = /\ACURRENT_(?:DATE|TIMESTAMP)?\z/
-      Sequel::Deprecation.deprecate_constant(self, :MYSQL_TIMESTAMP_RE)
-
-      CAST_TYPES = {String=>:CHAR, Integer=>:SIGNED, Time=>:DATETIME, DateTime=>:DATETIME, Numeric=>:DECIMAL, BigDecimal=>:DECIMAL, File=>:BINARY}#.freeze # SEQUEL5
-      COLUMN_DEFINITION_ORDER = [:collate, :null, :default, :unique, :primary_key, :auto_increment, :references]#.freeze # SEQUEL5
-
+      CAST_TYPES = {String=>:CHAR, Integer=>:SIGNED, Time=>:DATETIME, DateTime=>:DATETIME, Numeric=>:DECIMAL, BigDecimal=>:DECIMAL, File=>:BINARY}.freeze
+      COLUMN_DEFINITION_ORDER = [:collate, :null, :default, :unique, :primary_key, :auto_increment, :references].freeze
       
       # Set the default charset used for CREATE TABLE.  You can pass the
       # :charset option to create_table to override this setting.
-      #attr_accessor :default_charset # SEQUEL5
+      attr_accessor :default_charset
 
       # Set the default collation used for CREATE TABLE.  You can pass the
       # :collate option to create_table to override this setting.
-      #attr_accessor :default_collate # SEQUEL5
+      attr_accessor :default_collate
 
       # Set the default engine used for CREATE TABLE.  You can pass the
       # :engine option to create_table to override this setting.
-      #attr_accessor :default_engine # SEQUEL5
-
-      # SEQUEL5: Remove
-      attr_writer :default_charset
-      def default_charset
-        v = @default_charset
-        v.nil? ? Sequel::MySQL.instance_variable_get(:@default_charset) : v
-      end
-      attr_writer :default_collate
-      def default_collate
-        v = @default_collate
-        v.nil? ? Sequel::MySQL.instance_variable_get(:@default_collate) : v
-      end
-      attr_writer :default_engine
-      def default_engine
-        v = @default_engine
-        v.nil? ? Sequel::MySQL.instance_variable_get(:@default_engine) : v
-      end
+      attr_accessor :default_engine
 
       # MySQL's cast rules are restrictive in that you can't just cast to any possible
       # database type.
@@ -107,13 +39,10 @@ module Sequel
         CAST_TYPES[type] || super
       end
 
-      # Commit an existing prepared transaction with the given transaction
-      # identifier string.
       def commit_prepared_transaction(transaction_id, opts=OPTS)
         run("XA COMMIT #{literal(transaction_id)}", opts)
       end
 
-      # MySQL uses the :mysql database type
       def database_type
         :mysql
       end
@@ -163,7 +92,6 @@ module Sequel
         indexes = {}
         remove_indexes = []
         m = output_identifier_meth
-        im = input_identifier_meth
         schema, table = schema_and_table(table)
 
         table = Sequel::SQL::Identifier.new(table)
@@ -184,8 +112,6 @@ module Sequel
         indexes.reject{|k,v| remove_indexes.include?(k)}
       end
 
-      # Rollback an existing prepared transaction with the given transaction
-      # identifier string.
       def rollback_prepared_transaction(transaction_id, opts=OPTS)
         run("XA ROLLBACK #{literal(transaction_id)}", opts)
       end
@@ -239,16 +165,6 @@ module Sequel
       # :server :: Set the server to use
       def tables(opts=OPTS)
         full_tables('BASE TABLE', opts)
-      end
-      
-      # Changes the database in use by issuing a USE statement.  I would be
-      # very careful if I used this.
-      def use(db_name)
-        Sequel::Deprecation.deprecate("Database#use", "Create a new Sequel::Database instance instead of using Database#use")
-        disconnect
-        @opts[:database] = db_name if self << "USE #{db_name}"
-        @schemas = {}
-        self
       end
       
       # Return an array of symbols specifying view names in the current database.
@@ -324,7 +240,6 @@ module Sequel
         end
       end
 
-      # MySQL server requires table names when dropping indexes.
       def alter_table_sql(table, op)
         case op[:op]
         when :drop_index
@@ -379,7 +294,6 @@ module Sequel
         sqls
       end
       
-      # Use MySQL specific AUTO_INCREMENT text.
       def auto_increment_sql
         'AUTO_INCREMENT'
       end
@@ -400,7 +314,6 @@ module Sequel
         end
       end
 
-      # The order of the column definition, as an array of symbols.
       def column_definition_order
         COLUMN_DEFINITION_ORDER
       end
@@ -488,7 +401,6 @@ module Sequel
         metadata_dataset.with_sql('SHOW FULL TABLES').server(opts[:server]).map{|r| m.call(r.values.first) if r.delete(:Table_type) == type}.compact
       end
 
-      # Handle MySQL specific index SQL syntax
       def index_definition_sql(table_name, index)
         index_name = quote_identifier(index[:name] || default_index_name(table_name, index[:columns]))
         raise Error, "Partial indexes are not supported for this database" if index[:where] && !supports_partial_indexes?
@@ -520,7 +432,6 @@ module Sequel
         end
       end
 
-      # Recognize MySQL set type.
       def schema_column_type(db_type)
         case db_type
         when /\Aset/io
@@ -629,99 +540,6 @@ module Sequel
   
     # Dataset methods shared by datasets that use MySQL databases.
     module DatasetMethods
-      BOOL_TRUE = '1'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-      BOOL_FALSE = '0'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-      COMMA_SEPARATOR = ', '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA_SEPARATOR)
-      FOR_SHARE = ' LOCK IN SHARE MODE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :FOR_SHARE)
-      SQL_CALC_FOUND_ROWS = ' SQL_CALC_FOUND_ROWS'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_CALC_FOUND_ROWS)
-      APOS = "'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS)
-      APOS_RE = /'/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS_RE)
-      DOUBLE_APOS = "''".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_APOS)
-      SPACE = ' '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SPACE)
-      PAREN_CLOSE = ')'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PAREN_CLOSE)
-      PAREN_OPEN = '('.freeze
-      Sequel::Deprecation.deprecate_constant(self, :PAREN_OPEN)
-      NOT_SPACE = 'NOT '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :NOT_SPACE)
-      FROM = ' FROM '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :FROM)
-      COMMA = ', '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :COMMA)
-      LIMIT = " LIMIT ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :LIMIT)
-      GROUP_BY = " GROUP BY ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :GROUP_BY)
-      ESCAPE = " ESCAPE ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ESCAPE)
-      BACKSLASH = "\\".freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKSLASH)
-      REGEXP = 'REGEXP'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :REGEXP)
-      LIKE = 'LIKE'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :LIKE)
-      BINARY = 'BINARY '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BINARY)
-      CONCAT = "CONCAT".freeze
-      Sequel::Deprecation.deprecate_constant(self, :CONCAT)
-      CAST_BITCOMP_OPEN = "CAST(~".freeze
-      Sequel::Deprecation.deprecate_constant(self, :CAST_BITCOMP_OPEN)
-      CAST_BITCOMP_CLOSE = " AS SIGNED INTEGER)".freeze
-      Sequel::Deprecation.deprecate_constant(self, :CAST_BITCOMP_CLOSE)
-      STRAIGHT_JOIN = 'STRAIGHT_JOIN'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :STRAIGHT_JOIN)
-      NATURAL_LEFT_JOIN = 'NATURAL LEFT JOIN'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :NATURAL_LEFT_JOIN)
-      BACKTICK = '`'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKTICK)
-      BACKTICK_RE = /`/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKTICK_RE)
-      DOUBLE_BACKTICK = '``'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_BACKTICK)
-      EMPTY_COLUMNS = " ()".freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY_COLUMNS)
-      EMPTY_VALUES = " VALUES ()".freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY_VALUES)
-      IGNORE = " IGNORE".freeze
-      Sequel::Deprecation.deprecate_constant(self, :IGNORE)
-      ON_DUPLICATE_KEY_UPDATE = " ON DUPLICATE KEY UPDATE ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ON_DUPLICATE_KEY_UPDATE)
-      EQ_VALUES = '=VALUES('.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EQ_VALUES)
-      EQ = '='.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EQ)
-      WITH_ROLLUP = ' WITH ROLLUP'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :WITH_ROLLUP)
-      EXPLAIN = 'EXPLAIN '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXPLAIN)
-      EXPLAIN_EXTENDED = 'EXPLAIN EXTENDED '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EXPLAIN_EXTENDED)
-      BACKSLASH_RE = /\\/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKSLASH_RE)
-      QUAD_BACKSLASH = "\\\\\\\\".freeze
-      Sequel::Deprecation.deprecate_constant(self, :QUAD_BACKSLASH)
-      BLOB_START = "0x".freeze
-      Sequel::Deprecation.deprecate_constant(self, :BLOB_START)
-      EMPTY_BLOB = "''".freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY_BLOB)
-      HSTAR = "H*".freeze
-      Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-      CURRENT_TIMESTAMP_56 = 'CURRENT_TIMESTAMP(6)'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CURRENT_TIMESTAMP_56)
-      ONLY_OFFSET = ",18446744073709551615".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ONLY_OFFSET)
-      NON_SQL_OPTIONS = (Dataset::NON_SQL_OPTIONS + [:insert_ignore, :update_ignore, :on_duplicate_key_update]).freeze
-      Sequel::Deprecation.deprecate_constant(self, :NON_SQL_OPTIONS)
-
       MATCH_AGAINST = ["MATCH ".freeze, " AGAINST (".freeze, ")".freeze].freeze
       MATCH_AGAINST_BOOLEAN = ["MATCH ".freeze, " AGAINST (".freeze, " IN BOOLEAN MODE)".freeze].freeze
 
@@ -733,8 +551,6 @@ module Sequel
       include Sequel::Dataset::Replace
       include UnmodifiedIdentifiers::DatasetMethods
 
-      # MySQL specific syntax for LIKE/REGEXP searches, as well as
-      # string concatenation.
       def complex_expression_sql_append(sql, op, args)
         case op
         when :IN, :"NOT IN"
@@ -802,10 +618,10 @@ module Sequel
       # Sets up the select methods to delete from if deleting from a
       # joined dataset:
       #
-      #   DB[:a].join(:b, :a_id=>:id).delete
+      #   DB[:a].join(:b, a_id: :id).delete
       #   # DELETE a FROM a INNER JOIN b ON (b.a_id = a.id)
       #
-      #   DB[:a].join(:b, :a_id=>:id).delete_from(:a, :b).delete
+      #   DB[:a].join(:b, a_id: :id).delete_from(:a, :b).delete
       #   # DELETE a, b FROM a INNER JOIN b ON (b.a_id = a.id)
       def delete_from(*tables)
         clone(:delete_from=>tables)
@@ -838,26 +654,10 @@ module Sequel
         SQL::PlaceholderLiteralString.new((opts[:boolean] ? MATCH_AGAINST_BOOLEAN : MATCH_AGAINST), [Array(cols), terms])
       end
 
-      # Transforms an CROSS JOIN to an INNER JOIN if the expr is not nil.
-      # Raises an error on use of :full_outer type, since MySQL doesn't support it.
-      def join_table(type, table, expr=nil, opts=OPTS, &block)
-        if (type == :cross) && !expr.nil?
-           Sequel::Deprecation.deprecate(":cross join type with conditions being converted to INNER JOIN on MySQL", "Use :inner join type instead")
-          type = :inner
-        end
-        raise(Sequel::Error, "MySQL doesn't support FULL OUTER JOIN or NATURAL FULL JOIN") if type == :full_outer || type == :natural_full
-        super(type, table, expr, opts, &block)
-      end
-      
-      # Transforms :natural_inner to NATURAL LEFT JOIN and straight to
-      # STRAIGHT_JOIN.
+      # Transforms :straight to STRAIGHT_JOIN.
       def join_type_sql(join_type)
-        case join_type
-        when :straight
+        if join_type == :straight
           'STRAIGHT_JOIN'
-        when :natural_inner
-           Sequel::Deprecation.deprecate(":natural_inner join type being converted to NATURAL LEFT JOIN on MySQL", "Use :natural_left join type for NATURAL LEFT JOIN, or :natural join type for NATURAL JOIN")
-          'NATURAL LEFT JOIN'
         else
           super
         end
@@ -868,7 +668,7 @@ module Sequel
       # inserting rows that violate the unique key restriction.
       #
       #   dataset.insert_ignore.multi_insert(
-      #    [{:name => 'a', :value => 1}, {:name => 'b', :value => 2}]
+      #     [{name: 'a', value: 1}, {name: 'b', value: 2}]
       #   )
       #   # INSERT IGNORE INTO tablename (name, value) VALUES (a, 1), (b, 2)
       def insert_ignore
@@ -886,21 +686,21 @@ module Sequel
       # inserting rows that violate the unique key restriction.
       #
       #   dataset.on_duplicate_key_update.multi_insert(
-      #    [{:name => 'a', :value => 1}, {:name => 'b', :value => 2}]
+      #     [{name: 'a', value: 1}, {name: 'b', value: 2}]
       #   )
       #   # INSERT INTO tablename (name, value) VALUES (a, 1), (b, 2)
       #   # ON DUPLICATE KEY UPDATE name=VALUES(name), value=VALUES(value)
       #
       #   dataset.on_duplicate_key_update(:value).multi_insert(
-      #     [{:name => 'a', :value => 1}, {:name => 'b', :value => 2}]
+      #     [{name: 'a', value: 1}, {name: 'b', value: 2}]
       #   )
       #   # INSERT INTO tablename (name, value) VALUES (a, 1), (b, 2)
       #   # ON DUPLICATE KEY UPDATE value=VALUES(value)
       #
       #   dataset.on_duplicate_key_update(
-      #     :value => Sequel.lit('value + VALUES(value)')
+      #     value: Sequel.lit('value + VALUES(value)')
       #   ).multi_insert(
-      #     [{:name => 'a', :value => 1}, {:name => 'b', :value => 2}]
+      #     [{name: 'a', value: 1}, {name: 'b', value: 2}]
       #   )
       #   # INSERT INTO tablename (name, value) VALUES (a, 1), (b, 2)
       #   # ON DUPLICATE KEY UPDATE value=value + VALUES(value)
@@ -945,7 +745,7 @@ module Sequel
       end
 
       # MySQL's DISTINCT ON emulation using GROUP BY does not respect the
-      # queries ORDER BY clause.
+      # query's ORDER BY clause.
       def supports_ordered_distinct_on?
         false
       end
@@ -955,9 +755,8 @@ module Sequel
         true
       end
 
-      # MySQL does support fractional timestamps in literal timestamps, but it
-      # ignores them.  Also, using them seems to cause problems on 1.9.  Since
-      # they are ignored anyway, not using them is probably best.
+      # Check the database setting for whether fractional timestamps
+      # are suppported.
       def supports_timestamp_usecs?
         db.supports_timestamp_usecs?
       end
@@ -966,7 +765,7 @@ module Sequel
       # Useful if you have a unique key and want to just skip
       # updating rows that violate the unique key restriction.
       #
-      #   dataset.update_ignore.update({:name => 'a', :value => 1})
+      #   dataset.update_ignore.update(name: 'a', value: 1)
       #   # UPDATE IGNORE tablename SET name = 'a', value = 1
       def update_ignore
         clone(:update_ignore=>true)
@@ -1105,7 +904,7 @@ module Sequel
         '1'
       end
       
-      # MySQL supports multiple rows in INSERT.
+      # MySQL supports multiple rows in VALUES in INSERT.
       def multi_insert_sql_strategy
         :values
       end

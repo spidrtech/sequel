@@ -1,10 +1,9 @@
 # frozen-string-literal: true
 
-Sequel.require 'adapters/utils/unmodified_identifiers'
+require_relative 'utils/unmodified_identifiers'
 
 module Sequel
   module Mock
-    # Connection class for Sequel's mock adapter.
     class Connection
       # Sequel::Mock::Database object that created this connection
       attr_reader :db
@@ -30,7 +29,6 @@ module Sequel
       end
     end
 
-    # Database class for Sequel's mock adapter.
     class Database < Sequel::Database
       set_adapter_scheme :mock
 
@@ -61,9 +59,9 @@ module Sequel
       # Set the columns to set in the dataset when the dataset fetches
       # rows.  Argument types supported:
       # nil :: Set no columns
-      # Array of Symbols: Used for all datasets
-      # Array (otherwise): First retrieval gets the first value in the
-      #                    array, second gets the second value, etc.
+      # Array of Symbols :: Used for all datasets
+      # Array (otherwise) :: First retrieval gets the first value in the
+      #                      array, second gets the second value, etc.
       # Proc :: Called with the select SQL query, uses the value
       #         returned, which should be an array of symbols
       attr_writer :columns
@@ -311,19 +309,9 @@ module Sequel
     end
 
     class Dataset < Sequel::Dataset
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
-
       # The autoid setting for this dataset, if it has been overridden
       def autoid
         cache_get(:_autoid) || @opts[:autoid]
-      end
-
-      # Override the databases's autoid setting for this dataset
-      def autoid=(v)
-        Sequel::Deprecation.deprecate("Sequel::Mock::Dataset#autoid=", "Use with_autoid to return a modified dataset")
-        cache_set(:_autoid, nil)
-        @opts[:autoid] = v
       end
 
       # The fetch setting for this dataset, if it has been overridden
@@ -331,23 +319,9 @@ module Sequel
         cache_get(:_fetch) || @opts[:fetch]
       end
 
-      # Override the databases's fetch setting for this dataset
-      def _fetch=(v)
-        Sequel::Deprecation.deprecate("Sequel::Mock::Dataset#_fetch=", "Use with_fetch to return a modified dataset")
-        cache_set(:_fetch, nil)
-        @opts[:fetch] = v
-      end
-
       # The numrows setting for this dataset, if it has been overridden
       def numrows
         cache_get(:_numrows) || @opts[:numrows]
-      end
-
-      # Override the databases's numrows setting for this dataset
-      def numrows=(v)
-        Sequel::Deprecation.deprecate("Sequel::Mock::Dataset#_numrows=", "Use with_numrows to return a modified dataset")
-        cache_set(:_numrows, nil)
-        @opts[:numrows] = v
       end
 
       # If arguments are provided, use them to set the columns

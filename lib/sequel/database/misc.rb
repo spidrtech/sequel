@@ -26,18 +26,6 @@ module Sequel
       :time=>Sequel::SQLTime, :boolean=>[TrueClass, FalseClass].freeze, :float=>Float, :decimal=>BigDecimal,
       :blob=>Sequel::SQL::Blob}.freeze
 
-    # Module to be included in shared adapters so that when the DatabaseMethods are
-    # included in the database, the identifier mangling defaults are reset correctly.
-    module ResetIdentifierMangling
-      def self.extended(obj)
-        # :nocov:
-        Sequel::Deprecation.deprecate("Sequel::Database::ResetIdentifierMangling is no longer needed and will be removed in Sequel 5.  Please update your adapter")
-        obj.send(:reset_identifier_mangling) if obj.respond_to?(:reset_identifier_mangling)
-        # :nocov:
-      end
-    end
-    Sequel::Deprecation.deprecate_constant(self, :ResetIdentifierMangling)
-
     # Nested hook Proc; each new hook Proc just wraps the previous one.
     @initialize_hook = Proc.new {|db| }
 
@@ -88,7 +76,7 @@ module Sequel
         :user => uri.user,
         :password => uri.password,
         :port => uri.port,
-        :host => RUBY_VERSION < '1.9.3' ? uri.host : uri.hostname,
+        :host => uri.hostname,
         :database => (m = /\/(.*)/.match(uri.path)) && (m[1])
       }
     end
@@ -107,12 +95,16 @@ module Sequel
     # options hash.
     #
     # Accepts the following options:
+    # :cache_schema :: Whether schema should be cached for this Database instance
     # :default_string_column_size :: The default size of string columns, 255 by default.
-    # :identifier_mangling :: Whether to support non-default identifier mangling for the current database.
+    # :keep_reference :: Whether to keep a reference to this instance in Sequel::DATABASES, true by default.
     # :logger :: A specific logger to use.
     # :loggers :: An array of loggers to use.
+    # :log_connection_info :: Whether connection information should be logged when logging queries.
+    # :log_warn_duration :: The number of elapsed seconds after which queries should be logged at warn level.
     # :name :: A name to use for the Database object.
-    # :preconnect :: Whether to automatically connect to the maximum number of servers.
+    # :preconnect :: Whether to automatically connect to the maximum number of servers.  Can use a valid
+    #                of 'concurrently' to preconnect in separate threads.
     # :quote_identifiers :: Whether to quote identifiers.
     # :servers :: A hash specifying a server/shard specific options, keyed by shard symbol .
     # :single_threaded :: Whether to use a single-threaded connection pool.
@@ -150,10 +142,6 @@ module Sequel
 
       reset_default_dataset
       adapter_initialize
-      if typecast_value_boolean(@opts.fetch(:identifier_mangling, true))
-        # SEQUEL5: Remove
-        extension(:_deprecated_identifier_mangling)
-      end
 
       unless typecast_value_boolean(@opts[:keep_reference]) == false
         Sequel.synchronize{::Sequel::DATABASES.push(self)}
@@ -176,22 +164,20 @@ module Sequel
       @dataset_modules.freeze
       @schema_type_classes.freeze
       @loaded_extensions.freeze
-      # SEQUEL5: Frozen by default, remove this
-      @default_dataset.freeze
-      metadata_dataset.freeze
+      metadata_dataset
       super
     end
 
-    def initialize_copy(_)
-      Sequel::Deprecation.deprecate("Database#dup and #clone", "Use Sequel.connect to create a new Database instance")
-      # raise(Error, "cannot dup/clone a Sequel::Database instance") # SEQUEL5
-      super
+    # Disallow dup/clone for Database instances
+    undef_method :dup, :clone, :initialize_copy
+    if RUBY_VERSION >= '1.9.3'
+      undef_method :initialize_clone, :initialize_dup
     end
 
     # Cast the given type to a literal type
     #
     #   DB.cast_type_literal(Float) # double precision
-    #   DB.cast_type_literal(:foo) # foo
+    #   DB.cast_type_literal(:foo)  # foo
     def cast_type_literal(type)
       type_literal(:type=>type)
     end
@@ -236,8 +222,8 @@ module Sequel
 
     # Proxy the literal call to the dataset.
     #
-    #   DB.literal(1) # 1
-    #   DB.literal(:a) # a
+    #   DB.literal(1)   # 1
+    #   DB.literal(:a)  # a
     #   DB.literal('a') # 'a'
     def literal(v)
       schema_utility_dataset.literal(v)
@@ -271,8 +257,7 @@ module Sequel
       @schema_type_classes[type]
     end
     
-    # Default serial primary key options, used by the table creation
-    # code.
+    # Default serial primary key options, used by the table creation code.
     def serial_primary_key_options
       {:primary_key => true, :type => Integer, :auto_increment => true}
     end
@@ -309,6 +294,7 @@ module Sequel
       return nil if value.nil?
       meth = "typecast_value_#{column_type}"
       begin
+        # Allow calling private methods as per-type typecasting methods are private
         respond_to?(meth, true) ? send(meth, value) : value
       rescue ArgumentError, TypeError => e
         raise Sequel.convert_exception_class(e, InvalidValue)
@@ -363,8 +349,7 @@ module Sequel
       database_specific_error_class(exception, opts) || DatabaseError
     end
     
-    # Return the SQLState for the given exception, if one can be
-    # determined
+    # Return the SQLState for the given exception, if one can be determined
     def database_exception_sqlstate(exception, opts)
       nil
     end
@@ -415,7 +400,7 @@ module Sequel
     end
     
     # Convert the given exception to an appropriate Sequel::DatabaseError
-    # subclass, keeping message and traceback.
+    # subclass, keeping message and backtrace.
     def raise_error(exception, opts=OPTS)
       if !opts[:classes] || Array(opts[:classes]).any?{|c| exception.is_a?(c)}
         raise Sequel.convert_exception_class(exception, database_error_class(exception, opts))
@@ -503,25 +488,9 @@ module Sequel
       Float(value)
     end
 
-    # Used for checking/removing leading zeroes from strings so they don't get
-    # interpreted as octal.
-    LEADING_ZERO_RE = /\A0+(\d)/
-    Sequel::Deprecation.deprecate_constant(self, :LEADING_ZERO_RE)
-
-    if RUBY_VERSION >= '1.9'
-      # Typecast the value to an Integer
-      def typecast_value_integer(value)
-        (value.is_a?(String) && value =~ /\A0+(\d)/) ? Integer(value, 10) : Integer(value)
-      end
-    else
-    # :nocov:
-      # Replacement string when replacing leading zeroes.
-      LEADING_ZERO_REP = "\\1".freeze 
-      # Typecast the value to an Integer
-      def typecast_value_integer(value)
-        Integer(value.is_a?(String) ? value.sub(LEADING_ZERO_RE, LEADING_ZERO_REP) : value)
-      end
-    # :nocov:
+    # Typecast the value to an Integer
+    def typecast_value_integer(value)
+      (value.is_a?(String) && value =~ /\A0+(\d)/) ? Integer(value, 10) : Integer(value)
     end
 
     # Typecast the value to a String
@@ -541,8 +510,7 @@ module Sequel
         if value.is_a?(SQLTime)
           value
         else
-          # specifically check for nsec == 0 value to work around JRuby 1.6 ruby 1.9 mode bug
-          SQLTime.create(value.hour, value.min, value.sec, (value.respond_to?(:nsec) && value.nsec != 0) ? value.nsec/1000.0 : value.usec)
+          SQLTime.create(value.hour, value.min, value.sec, value.nsec/1000.0)
         end
       when String
         Sequel.string_to_time(value)

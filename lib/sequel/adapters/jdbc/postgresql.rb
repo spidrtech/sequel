@@ -1,7 +1,7 @@
 # frozen-string-literal: true
 
 Sequel::JDBC.load_driver('org.postgresql.Driver', :Postgres)
-Sequel.require 'adapters/shared/postgres'
+require_relative '../shared/postgres'
 
 module Sequel
   module JDBC
@@ -13,22 +13,6 @@ module Sequel
       end
     end
 
-    # SEQUEL5: Remove
-    class Type_Convertor
-      def RubyPGArray(r, i)
-        if v = r.getArray(i)
-          v.array.to_ary
-        end
-      end 
-      def RubyPGHstore(r, i)
-        if v = r.getObject(i)
-          v.to_hash
-        end
-      end 
-    end
-
-    # Adapter, Database, and Dataset support for accessing a PostgreSQL
-    # database via JDBC.
     module Postgres
       # Return PostgreSQL array types as ruby Arrays instead of
       # JDBC PostgreSQL driver-specific array type. Only used if the
@@ -48,8 +32,6 @@ module Sequel
         end
       end 
 
-      # Methods to add to Database instances that access PostgreSQL via
-      # JDBC.
       module DatabaseMethods
         include Sequel::Postgres::DatabaseMethods
 
@@ -83,10 +65,14 @@ module Sequel
               copier = copy_manager.copy_in(copy_into_sql(table, opts))
               if block_given?
                 while buf = yield
-                  copier.writeToCopy(buf.to_java_bytes, 0, buf.length)
+                  java_bytes = buf.to_java_bytes
+                  copier.writeToCopy(java_bytes, 0, java_bytes.length)
                 end
               else
-                data.each { |d| copier.writeToCopy(d.to_java_bytes, 0, d.length) }
+                data.each do |d|
+                  java_bytes = d.to_java_bytes
+                  copier.writeToCopy(java_bytes, 0, java_bytes.length)
+                end
               end
             rescue Exception => e
               copier.cancelCopy if copier
@@ -149,12 +135,6 @@ module Sequel
 
         private
         
-        # SEQUEL5: Remove
-        def conversion_procs_updated
-          super
-          Sequel.synchronize{@oid_convertor_map = {}}
-        end
-
         DATABASE_ERROR_CLASSES = [NativeException].freeze
         def database_error_classes
           DATABASE_ERROR_CLASSES
@@ -206,13 +186,8 @@ module Sequel
         end
       end
       
-      # Dataset subclass used for datasets that connect to PostgreSQL via JDBC.
       class Dataset < JDBC::Dataset
         include Sequel::Postgres::DatasetMethods
-        APOS = "'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :APOS)
-        HSTORE_TYPE = 'hstore'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :HSTORE_TYPE)
         
         private
         
@@ -229,7 +204,7 @@ module Sequel
         STRING_TYPE = Java::JavaSQL::Types::VARCHAR
         ARRAY_TYPE = Java::JavaSQL::Types::ARRAY
         ARRAY_METHOD = Postgres.method(:RubyPGArray)
-        PG_SPECIFIC_TYPES = [ARRAY_TYPE, Java::JavaSQL::Types::OTHER, Java::JavaSQL::Types::STRUCT]#.freeze # SEQUEL5
+        PG_SPECIFIC_TYPES = [ARRAY_TYPE, Java::JavaSQL::Types::OTHER, Java::JavaSQL::Types::STRUCT].freeze
         HSTORE_METHOD = Postgres.method(:RubyPGHstore)
 
         def type_convertor(map, meta, type, i)

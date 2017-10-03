@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 describe Sequel::Model::DatasetMethods, "#destroy"  do
   before do
@@ -84,24 +84,6 @@ describe Sequel::Model::DatasetMethods  do
     @c = Class.new(Sequel::Model(:items))
     @c.columns :id
     @c.db.reset
-  end
-
-  deprecated "#join_table should allow use to use a model class when joining" do
-    @c.join(Class.new(Sequel::Model(:categories)), :item_id => :id).sql.must_equal 'SELECT * FROM items INNER JOIN categories ON (categories.item_id = items.id)'
-  end
-
-  deprecated "#join_table should handle model classes that aren't simple selects using a subselect" do
-    @c.join(Class.new(Sequel::Model(DB[:categories].where(:foo=>1))), :item_id => :id).sql.must_equal 'SELECT * FROM items INNER JOIN (SELECT * FROM categories WHERE (foo = 1)) AS t1 ON (t1.item_id = items.id)'
-  end
-
-  deprecated "#graph should allow use to use a model class when joining" do
-    c = Class.new(Sequel::Model(:categories))
-    c.columns :id
-    @c.graph(c, :item_id => :id).sql.must_equal 'SELECT items.id, categories.id AS categories_id FROM items LEFT OUTER JOIN categories ON (categories.item_id = items.id)'
-  end
-
-  deprecated "#insert_sql should handle a single model instance as an argument" do
-    @c.dataset.insert_sql(@c.load(:id=>1)).must_equal 'INSERT INTO items (id) VALUES (1)'
   end
 
   it "#first should handle no primary key" do
@@ -209,7 +191,6 @@ describe Sequel::Model::DatasetMethods, "#where_single_value"  do
 
   it "should return single value" do
     5.times do
-      a = []
       @c.only_id.where_single_value(:id=>1).must_equal 1
       @c.db.sqls.must_equal ['SELECT id FROM items WHERE (id = 1) LIMIT 1']
     end

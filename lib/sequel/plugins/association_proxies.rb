@@ -37,7 +37,7 @@ module Sequel
     #     :arguments => [2],
     #     :block => {|x| 3},
     #     :instance => artist,
-    #     :reflection => {:name=>:albums} # AssociationReflection instance 
+    #     :reflection => AssociationReflection instance,
     #     :proxy_argument => 1,
     #     :proxy_block => {|ds| ds}
     #   }
@@ -51,7 +51,7 @@ module Sequel
     #   Album.plugin :association_proxies
     module AssociationProxies
       def self.configure(model, &block)
-        model.instance_eval do
+        model.instance_exec do
           @association_proxy_to_dataset = block if block
           @association_proxy_to_dataset ||= AssociationProxy::DEFAULT_PROXY_TO_DATASET
         end
@@ -80,11 +80,11 @@ module Sequel
         # is an array method, otherwise call the method on the association's dataset.
         def method_missing(meth, *args, &block)
           v = if @instance.model.association_proxy_to_dataset.call(:method=>meth, :arguments=>args, :block=>block, :instance=>@instance, :reflection=>@reflection, :proxy_argument=>@proxy_argument, :proxy_block=>@proxy_block)
-            @instance.send(@reflection.dataset_method)
+            @instance.public_send(@reflection[:dataset_method])
           else
             @instance.send(:load_associated_objects, @reflection, @proxy_argument, &@proxy_block)
           end
-          v.send(meth, *args, &block)
+          v.public_send(meth, *args, &block)
         end
       end
 
@@ -100,9 +100,8 @@ module Sequel
         # directly.
         def def_association_method(opts)
           if opts.returns_array?
-            association_module_def(opts.association_method, opts) do |*dynamic_opts, &block|
-              Sequel::Deprecation.deprecate("Passing multiple arguments to ##{opts.association_method}", "Additional arguments are currently ignored") if dynamic_opts.length > 1
-              AssociationProxy.new(self, opts, dynamic_opts.length == 0 ? OPTS : dynamic_opts[0], &block)
+            association_module_def(opts.association_method, opts) do |dynamic_opts=OPTS, &block|
+              AssociationProxy.new(self, opts, dynamic_opts, &block)
             end
           else
             super

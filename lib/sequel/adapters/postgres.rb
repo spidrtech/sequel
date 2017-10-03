@@ -1,6 +1,6 @@
 # frozen-string-literal: true
 
-Sequel.require 'adapters/shared/postgres'
+require_relative 'shared/postgres'
 
 begin 
   require 'pg' 
@@ -26,29 +26,10 @@ end
 
 module Sequel
   module Postgres
-    # SEQUEL5: Remove
-    TYPE_CONVERTOR = Class.new do
-      def bytea(s) ::Sequel::SQL::Blob.new(Adapter.unescape_bytea(s)) end
-    end.new
-    Sequel::Deprecation.deprecate_constant(self, :TYPE_CONVERTOR)
-
     if Sequel::Postgres::USES_PG
       # Whether the given sequel_pg version integer is supported.
       def self.sequel_pg_version_supported?(version)
         version >= 10617
-      end
-    end
-
-    # SEQUEL5: Remove
-    @use_iso_date_format = true
-    class << self
-      def use_iso_date_format
-        Sequel::Deprecation.deprecate("Sequel::Postgres.use_iso_date_format", "Use the :use_iso_date_format Database option instead")
-        @use_iso_date_format
-      end
-      def use_iso_date_format=(v)
-        Sequel::Deprecation.deprecate("Sequel::Postgres.use_iso_date_format=", "Use the :use_iso_date_format Database option instead")
-        @use_iso_date_format = v
       end
     end
 
@@ -61,7 +42,7 @@ module Sequel
       if defined?(::PG::ConnectionBad)
         DISCONNECT_ERROR_CLASSES << ::PG::ConnectionBad
       end
-      #DISCONNECT_ERROR_CLASSES.freeze # SEQUEL5
+      DISCONNECT_ERROR_CLASSES.freeze
       
       disconnect_errors = [
         'could not receive data from server',
@@ -89,7 +70,6 @@ module Sequel
         # Escape bytea values.  Uses historical format instead of hex
         # format for maximum compatibility.
         def escape_bytea(str)
-          # each_byte used instead of [] for 1.9 compatibility
           str.gsub(/[\000-\037\047\134\177-\377]/n){|b| "\\#{sprintf('%o', b.each_byte{|x| break x}).rjust(3, '0')}"}
         end
         
@@ -160,15 +140,12 @@ module Sequel
 
       private
 
-      # Return the PGResult object that is returned by executing the given
-      # sql and args.
+      # Return the PGResult containing the query results.
       def execute_query(sql, args)
         @db.log_connection_yield(sql, self, args){args ? async_exec(sql, args) : async_exec(sql)}
       end
     end
     
-    # Database class for PostgreSQL databases used with Sequel and the
-    # pg, postgres, or postgres-pr driver.
     class Database < Sequel::Database
       include Sequel::Postgres::DatabaseMethods
 
@@ -185,15 +162,12 @@ module Sequel
       attr_reader :convert_infinite_timestamps
 
       # Convert given argument so that it can be used directly by pg.  Currently, pg doesn't
-      # handle fractional seconds in Time/DateTime or blobs with "\0", and it won't ever
-      # handle Sequel::SQLTime values correctly.  Only public for use by the adapter, shouldn't
-      # be used by external code.
+      # handle fractional seconds in Time/DateTime or blobs with "\0". Only public for use by
+      # the adapter, shouldn't be used by external code.
       def bound_variable_arg(arg, conn)
         case arg
         when Sequel::SQL::Blob
           {:value=>arg, :type=>17, :format=>1}
-        when Sequel::SQLTime
-          literal(arg)
         when DateTime, Time
           literal(arg)
         else
@@ -230,7 +204,7 @@ module Sequel
             conn.set_notice_receiver(&receiver)
           end
         else
-          unless typecast_value_boolean(@opts.fetch(:force_standard_strings, Postgres.instance_variable_get(:@force_standard_strings))) # , true)) # SEQUEL5
+          unless typecast_value_boolean(@opts.fetch(:force_standard_strings, true))
             raise Error, "Cannot create connection using postgres-pr unless force_standard_strings is set"
           end
 
@@ -290,7 +264,6 @@ module Sequel
         add_conversion_proc(1082, pr)
       end
 
-      # Disconnect given connection
       def disconnect_connection(conn)
         conn.finish
       rescue PGError, IOError
@@ -322,7 +295,6 @@ module Sequel
         end
       end
       
-      # Execute the given SQL with the given args on an available connection.
       def execute(sql, opts=OPTS, &block)
         synchronize(opts[:server]){|conn| check_database_errors{_execute(conn, sql, opts, &block)}}
       end
@@ -524,7 +496,7 @@ module Sequel
       # Add the primary_keys and primary_key_sequences instance variables,
       # so we can get the correct return values for inserted rows.
       def adapter_initialize
-        @use_iso_date_format = typecast_value_boolean(@opts.fetch(:use_iso_date_format, Postgres.instance_variable_get(:@use_iso_date_format))) # , true)) # SEQUEL5
+        @use_iso_date_format = typecast_value_boolean(@opts.fetch(:use_iso_date_format, true))
         initialize_postgres_adapter
         add_conversion_proc(17, method(:unescape_bytea)) if USES_PG
         add_conversion_proc(1082, TYPE_TRANSLATOR.method(:date)) if @use_iso_date_format
@@ -629,7 +601,7 @@ module Sequel
       end
 
       # If the value is an infinite value (either an infinite float or a string returned by
-      # by PostgreSQL for an infinite timestamp), return it without converting it if
+      # by PostgreSQL for an infinite date), return it without converting it if
       # convert_infinite_timestamps is set.
       def typecast_value_date(value)
         if convert_infinite_timestamps
@@ -661,20 +633,9 @@ module Sequel
       end
     end
     
-    # Dataset class for PostgreSQL datasets that use the pg, postgres, or
-    # postgres-pr driver.
     class Dataset < Sequel::Dataset
       include Sequel::Postgres::DatasetMethods
 
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
-      APOS = "'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS)
-      DEFAULT_CURSOR_NAME = 'sequel_cursor'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DEFAULT_CURSOR_NAME)
-      
-      # Yield all rows returned by executing the given SQL and converting
-      # the types.
       def fetch_rows(sql)
         return cursor_fetch_rows(sql){|h| yield h} if @opts[:cursor]
         execute(sql){|res| yield_hash_rows(res, fetch_rows_set_cols(res)){|h| yield h}}
@@ -702,8 +663,8 @@ module Sequel
       # Usage:
       #
       #   DB[:huge_table].use_cursor.each{|row| p row}
-      #   DB[:huge_table].use_cursor(:rows_per_fetch=>10000).each{|row| p row}
-      #   DB[:huge_table].use_cursor(:cursor_name=>'my_cursor').each{|row| p row}      
+      #   DB[:huge_table].use_cursor(rows_per_fetch: 10000).each{|row| p row}
+      #   DB[:huge_table].use_cursor(cursor_name: 'my_cursor').each{|row| p row}      
       #
       # This is untested with the prepared statement/bound variable support,
       # and unlikely to work with either.
@@ -716,15 +677,14 @@ module Sequel
       # large dataset by updating individual rows while processing the dataset
       # via a cursor:
       #
-      #   DB[:huge_table].use_cursor(:rows_per_fetch=>1).each do |row|
-      #     DB[:huge_table].where_current_of.update(:column=>ruby_method(row))
+      #   DB[:huge_table].use_cursor(rows_per_fetch: 1).each do |row|
+      #     DB[:huge_table].where_current_of.update(column: ruby_method(row))
       #   end
       def where_current_of(cursor_name='sequel_cursor')
         clone(:where=>Sequel.lit(['CURRENT OF '], Sequel.identifier(cursor_name)))
       end
 
       if USES_PG
-        
         PREPARED_ARG_PLACEHOLDER = LiteralString.new('$').freeze
         
         # PostgreSQL specific argument mapper used for mapping the named
@@ -789,7 +749,7 @@ module Sequel
         cursor_name = quote_identifier(cursor[:cursor_name] || 'sequel_cursor')
         rows_per_fetch = cursor[:rows_per_fetch].to_i
 
-        db.send(*(hold ? [:synchronize, server_opts[:server]] : [:transaction, server_opts])) do 
+        db.public_send(*(hold ? [:synchronize, server_opts[:server]] : [:transaction, server_opts])) do 
           begin
             execute_ddl("DECLARE #{cursor_name} NO SCROLL CURSOR WITH#{'OUT' unless hold} HOLD FOR #{sql}", server_opts)
             rows_per_fetch = 1000 if rows_per_fetch <= 0
@@ -869,7 +829,3 @@ if Sequel::Postgres::USES_PG && !ENV['NO_SEQUEL_PG']
   rescue LoadError
   end
 end
-
-# SEQUEL5: Remove
-SEQUEL_POSTGRES_USES_PG = Sequel::Postgres::USES_PG
-Sequel::Deprecation.deprecate_constant(Object, :SEQUEL_POSTGRES_USES_PG)

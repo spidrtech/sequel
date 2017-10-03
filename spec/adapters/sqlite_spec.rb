@@ -1,59 +1,17 @@
 SEQUEL_ADAPTER_TEST = :sqlite
 
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
+require_relative 'spec_helper'
 
 describe "An SQLite database" do
   before do
     @db = DB
-    deprecated do
-    @fk = @db.foreign_keys
-    end
   end
   after do
     @db.drop_table?(:fk)
-    deprecated do
-      @db.auto_vacuum = :none
-      @db.run 'VACUUM'
-      @db.foreign_keys = @fk
-      @db.case_sensitive_like = true
-    end
     @db.use_timestamp_timezones = false
     Sequel.datetime_class = Time
   end
 
-  deprecated "should support getting setting pragma values" do
-    @db.pragma_set(:auto_vacuum, '0')
-    @db.run 'VACUUM'
-    @db.pragma_get(:auto_vacuum).to_s.must_equal '0'
-    @db.pragma_set(:auto_vacuum, '1')
-    @db.run 'VACUUM'
-    @db.pragma_get(:auto_vacuum).to_s.must_equal '1'
-    @db.pragma_set(:auto_vacuum, '2')
-    @db.run 'VACUUM'
-    @db.pragma_get(:auto_vacuum).to_s.must_equal '2'
-  end
-  
-  deprecated "should support getting and setting the auto_vacuum pragma" do
-    @db.auto_vacuum = :full
-    @db.run 'VACUUM'
-    @db.auto_vacuum.must_equal :full
-    @db.auto_vacuum = :incremental
-    @db.run 'VACUUM'
-    @db.auto_vacuum.must_equal :incremental
-    
-    proc {@db.auto_vacuum = :invalid}.must_raise(Sequel::Error)
-  end
-  
-  deprecated "should respect case sensitive like false" do
-    @db.case_sensitive_like = false
-    @db.get(Sequel.like('a', 'A')).to_s.must_equal '1'
-  end
-  
-  deprecated "should respect case sensitive like true" do
-    @db.case_sensitive_like = true
-    @db.get(Sequel.like('a', 'A')).to_s.must_equal '0'
-  end
-  
   it "should support casting to Date by using the date function" do
     @db.get(Sequel.cast('2012-10-20 11:12:13', Date)).must_equal '2012-10-20'
   end
@@ -65,28 +23,6 @@ describe "An SQLite database" do
   
   it "should provide the SQLite version as an integer" do
     @db.sqlite_version.must_be_kind_of(Integer)
-  end
-  
-  deprecated "should support setting and getting the foreign_keys pragma" do
-    (@db.sqlite_version >= 30619 ? [true, false] : [nil]).must_include(@db.foreign_keys)
-    @db.foreign_keys = true
-    @db.foreign_keys = false
-  end
-  
-  deprecated "should enforce foreign key integrity if foreign_keys pragma is set" do
-    @db.foreign_keys = true
-    @db.create_table!(:fk){primary_key :id; foreign_key :parent_id, :fk}
-    @db[:fk].insert(1, nil)
-    @db[:fk].insert(2, 1)
-    @db[:fk].insert(3, 3)
-    proc{@db[:fk].insert(4, 5)}.must_raise(Sequel::ForeignKeyConstraintViolation, Sequel::ConstraintViolation, Sequel::DatabaseError)
-  end if DB.sqlite_version >= 30619
-  
-  deprecated "should not enforce foreign key integrity if foreign_keys pragma is unset" do
-    @db.foreign_keys = false
-    @db.create_table!(:fk){primary_key :id; foreign_key :parent_id, :fk}
-    @db[:fk].insert(1, 2)
-    @db[:fk].all.must_equal [{:id=>1, :parent_id=>2}]
   end
   
   it "should support a use_timestamp_timezones setting" do
@@ -108,29 +44,7 @@ describe "An SQLite database" do
     @db.tables.must_include(:fk)
   end
 
-  deprecated "should support getting and setting the synchronous pragma" do
-    @db.synchronous = :off
-    @db.synchronous.must_equal :off
-    @db.synchronous = :normal
-    @db.synchronous.must_equal :normal
-    @db.synchronous = :full
-    @db.synchronous.must_equal :full
-    
-    proc {@db.synchronous = :invalid}.must_raise(Sequel::Error)
-  end
-  
-  deprecated "should support getting and setting the temp_store pragma" do
-    @db.temp_store = :default
-    @db.temp_store.must_equal :default
-    @db.temp_store = :file
-    @db.temp_store.must_equal :file
-    @db.temp_store = :memory
-    @db.temp_store.must_equal :memory
-    
-    proc {@db.temp_store = :invalid}.must_raise(Sequel::Error)
-  end
-  
-  cspecify "should support timestamps and datetimes and respect datetime_class", [:do], [:jdbc], [:swift] do
+  cspecify "should support timestamps and datetimes and respect datetime_class", [:jdbc] do
     @db.create_table!(:fk){timestamp :t; datetime :d}
     @db.use_timestamp_timezones = true
     t1 = Time.at(1)
@@ -309,32 +223,6 @@ describe "An SQLite dataset" do
     proc{@d.literal(~Sequel.expr(:x).like(/a/))}.must_raise(Sequel::InvalidOperation)
     proc{@d.literal(Sequel.expr(:x).like(/a/i))}.must_raise(Sequel::InvalidOperation)
     proc{@d.literal(~Sequel.expr(:x).like(/a/i))}.must_raise(Sequel::InvalidOperation)
-  end
-end
-
-describe "An SQLite dataset AS clause" do
-  it "should use a string literal for Sequel[:col].as(:alias)" do
-    DB.literal(Sequel[:c].as(:a)).must_equal "`c` AS 'a'"
-  end
-
-  it "should use a string literal for Sequel[:table][:col].as(:alias)" do
-    DB.literal(Sequel[:t][:c].as(:a)).must_equal "`t`.`c` AS 'a'"
-  end
-
-  it "should use a string literal for :column.as(:alias)" do
-    DB.literal(Sequel.as(:c, :a)).must_equal "`c` AS 'a'"
-  end
-
-  it "should use a string literal in the SELECT clause" do
-    DB[:t].select(Sequel[:c].as(:a)).sql.must_equal "SELECT `c` AS 'a' FROM `t`"
-  end
-
-  it "should use a string literal in the FROM clause" do
-    DB[Sequel[:t].as(:a)].sql.must_equal "SELECT * FROM `t` AS 'a'"
-  end
-
-  it "should use a string literal in the JOIN clause" do
-    DB[:t].join_table(:natural, :j, nil, :table_alias=>:a).sql.must_equal "SELECT * FROM `t` NATURAL JOIN `j` AS 'a'"
   end
 end
 
@@ -619,8 +507,6 @@ describe "A SQLite database" do
   end
   
   it "should choose a temporary table name that isn't already used when dropping or renaming columns" do
-    sqls = []
-    @db.loggers << (l=Class.new{%w'info error'.each{|m| define_method(m){|sql| sqls << sql}}}.new)
     @db.tables.each{|t| @db.drop_table(t) if t.to_s =~ /test3/}
     @db.create_table :test3 do
       Integer :h
@@ -636,10 +522,7 @@ describe "A SQLite database" do
     @db[:test3].columns.must_equal [:h, :i]
     @db[:test3_backup0].columns.must_equal [:j]
     @db[:test3_backup1].columns.must_equal [:k]
-    sqls.clear
     @db.drop_column(:test3, :i)
-    sqls.any?{|x| x =~ /\AALTER TABLE.*test3.*RENAME TO.*test3_backup2/}.must_equal true
-    sqls.any?{|x| x =~ /\AALTER TABLE.*test3.*RENAME TO.*test3_backup[01]/}.must_equal false
     @db[:test3].columns.must_equal [:h]
     @db[:test3_backup0].columns.must_equal [:j]
     @db[:test3_backup1].columns.must_equal [:k]
@@ -648,15 +531,11 @@ describe "A SQLite database" do
       Integer :l
     end
 
-    sqls.clear
     @db.rename_column(:test3, :h, :i)
-    sqls.any?{|x| x =~ /\AALTER TABLE.*test3.*RENAME TO.*test3_backup3/}.must_equal true
-    sqls.any?{|x| x =~ /\AALTER TABLE.*test3.*RENAME TO.*test3_backup[012]/}.must_equal false
     @db[:test3].columns.must_equal [:i]
     @db[:test3_backup0].columns.must_equal [:j]
     @db[:test3_backup1].columns.must_equal [:k]
     @db[:test3_backup2].columns.must_equal [:l]
-    @db.loggers.delete(l)
   end
   
   it "should support add_index" do
@@ -679,34 +558,17 @@ describe "A SQLite database" do
   end
 
   it "should have support for various #transaction modes" do
-    sqls = []
-    @db.loggers << Class.new{%w'info error'.each{|m| define_method(m){|sql| sqls << sql}}}.new
-
-    @db.transaction(:mode => :immediate) do
-      sqls.last.must_equal "BEGIN IMMEDIATE TRANSACTION"
-    end
-    @db.transaction(:mode => :exclusive) do
-      sqls.last.must_equal "BEGIN EXCLUSIVE TRANSACTION"
-    end
-    @db.transaction(:mode => :deferred) do
-      sqls.last.must_equal "BEGIN DEFERRED TRANSACTION"
-    end
-    @db.transaction do
-      sqls.last.must_equal 'BEGIN'
-    end
+    @db.transaction(:mode => :immediate){}
+    @db.transaction(:mode => :exclusive){}
+    @db.transaction(:mode => :deferred){}
+    @db.transaction{}
 
     @db.transaction_mode.must_be_nil
     @db.transaction_mode = :immediate
     @db.transaction_mode.must_equal :immediate
-    @db.transaction do
-      sqls.last.must_equal "BEGIN IMMEDIATE TRANSACTION"
-    end
-    @db.transaction(:mode => :exclusive) do
-      sqls.last.must_equal "BEGIN EXCLUSIVE TRANSACTION"
-    end
-
+    @db.transaction{}
+    @db.transaction(:mode => :exclusive){}
     proc {@db.transaction_mode = :invalid}.must_raise(Sequel::Error)
-
     @db.transaction_mode.must_equal :immediate
     proc {@db.transaction(:mode => :invalid) {}}.must_raise(Sequel::Error)
   end

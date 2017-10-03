@@ -2,7 +2,7 @@
 
 module Sequel
   module Plugins
-    # The TypecastOnLoad plugin exists because most of Sequel's database adapters don't
+    # The typecast_on_load plugin exists because most of Sequel's database adapters don't
     # have complete control over typecasting, and may return columns that aren't
     # typecast correctly (with correct being defined as how the model object
     # would typecast the same column values).
@@ -23,7 +23,7 @@ module Sequel
     module TypecastOnLoad
       # Call add_typecast_on_load_columns on the passed column arguments.
       def self.configure(model, *columns)
-        model.instance_eval do
+        model.instance_exec do
           @typecast_on_load_columns ||= []
           add_typecast_on_load_columns(*columns)
         end

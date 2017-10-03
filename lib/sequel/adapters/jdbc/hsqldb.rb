@@ -1,7 +1,7 @@
 # frozen-string-literal: true
 
 Sequel::JDBC.load_driver('org.hsqldb.jdbcDriver', :HSQLDB)
-Sequel.require 'adapters/jdbc/transactions'
+require_relative 'transactions'
 
 module Sequel
   module JDBC
@@ -13,16 +13,10 @@ module Sequel
       end
     end
 
-    # Database and Dataset support for HSQLDB databases accessed via JDBC.
     module HSQLDB
-      # Instance methods for HSQLDB Database objects accessed via JDBC.
       module DatabaseMethods
-        PRIMARY_KEY_INDEX_RE = /\Asys_idx_sys_pk_/i.freeze
-        Sequel::Deprecation.deprecate_constant(self, :PRIMARY_KEY_INDEX_RE)
-
         include ::Sequel::JDBC::Transactions
 
-        # HSQLDB uses the :hsqldb database type.
         def database_type
           :hsqldb
         end
@@ -54,13 +48,12 @@ module Sequel
 
         private
         
-        # HSQLDB specific SQL for renaming columns, and changing column types and/or nullity.
         def alter_table_sql(table, op)
           case op[:op]
           when :add_column
             if op[:table]
               [super(table, op.merge(:table=>nil)),
-               alter_table_sql(table, op.merge(:op=>:add_constraint, :type=>:foreign_key, :name=>op[:foreign_key_name], :columns=>[op[:name]], :table=>op[:table]))]
+               alter_table_sql(table, op.merge(:op=>:add_constraint, :type=>:foreign_key, :name=>op[:foreign_key_constraint_name], :columns=>[op[:name]], :table=>op[:table]))]
             else
               super
             end
@@ -144,25 +137,7 @@ module Sequel
         end
       end
       
-      # Dataset class for HSQLDB datasets accessed via JDBC.
       class Dataset < JDBC::Dataset
-        BOOL_TRUE = 'TRUE'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-        BOOL_FALSE = 'FALSE'.freeze
-        Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-        SQL_WITH_RECURSIVE = "WITH RECURSIVE ".freeze
-        Sequel::Deprecation.deprecate_constant(self, :SQL_WITH_RECURSIVE)
-        APOS = "'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :APOS)
-        HSTAR = "H*".freeze
-        Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-        BLOB_OPEN = "X'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :BLOB_OPEN)
-        DEFAULT_FROM = " FROM (VALUES (0))".freeze
-        Sequel::Deprecation.deprecate_constant(self, :DEFAULT_FROM)
-        TIME_FORMAT = "'%H:%M:%S'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :TIME_FORMAT)
-
         # Handle HSQLDB specific case insensitive LIKE and bitwise operator support.
         def complex_expression_sql_append(sql, op, args)
           case op

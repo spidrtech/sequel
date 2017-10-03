@@ -12,20 +12,12 @@ module Sequel
       end
     end
 
-    # Database and Dataset support for H2 databases accessed via JDBC.
     module H2
-      # Instance methods for H2 Database objects accessed via JDBC.
       module DatabaseMethods
-        PRIMARY_KEY_INDEX_RE = /\Aprimary_key/i.freeze
-        Sequel::Deprecation.deprecate_constant(self, :PRIMARY_KEY_INDEX_RE)
-      
-        # Commit an existing prepared transaction with the given transaction
-        # identifier string.
         def commit_prepared_transaction(transaction_id, opts=OPTS)
           run("COMMIT TRANSACTION #{transaction_id}", opts)
         end
 
-        # H2 uses the :h2 database type.
         def database_type
           :h2
         end
@@ -39,18 +31,16 @@ module Sequel
           @h2_version ||= get(Sequel.function(:H2VERSION))
         end
 
-        # Rollback an existing prepared transaction with the given transaction
-        # identifier string.
         def rollback_prepared_transaction(transaction_id, opts=OPTS)
           run("ROLLBACK TRANSACTION #{transaction_id}", opts)
         end
 
-        # H2 uses an IDENTITY type
+        # H2 uses an IDENTITY type for primary keys
         def serial_primary_key_options
           {:primary_key => true, :type => :identity, :identity=>true}
         end
 
-        # H2 supports CREATE TABLE IF NOT EXISTS syntax.
+        # H2 supports CREATE TABLE IF NOT EXISTS syntax
         def supports_create_table_if_not_exists?
           true
         end
@@ -82,7 +72,6 @@ module Sequel
           end
         end
 
-        # H2 needs to add a primary key column as a constraint
         def alter_table_sql(table, op)
           case op[:op]
           when :add_column
@@ -94,12 +83,14 @@ module Sequel
               sqls = [super(table, op)]
 
               if pk && (h2_version >= '1.4' || op[:type] != :identity)
+                # H2 needs to add a primary key column as a constraint in this case
                 sqls << "ALTER TABLE #{quote_schema_table(table)} ADD PRIMARY KEY (#{quote_identifier(op[:name])})"
               end
 
               if ref
                 op[:table] = ref
-                sqls << "ALTER TABLE #{quote_schema_table(table)} ADD FOREIGN KEY (#{quote_identifier(op[:name])}) #{column_references_sql(op)}"
+                constraint_name = op[:foreign_key_constraint_name]
+                sqls << "ALTER TABLE #{quote_schema_table(table)} ADD#{" CONSTRAINT #{quote_identifier(constraint_name)}" if constraint_name} FOREIGN KEY (#{quote_identifier(op[:name])}) #{column_references_sql(op)}"
               end
 
               sqls
@@ -168,25 +159,14 @@ module Sequel
           false
         end
 
-        # Use BIGINT IDENTITY for identity columns that use bigint, fixes
-        # the case where primary_key :column, :type=>:Bignum is used.
+        # Use BIGINT IDENTITY for identity columns that use :Bignum type
         def type_literal_generic_bignum_symbol(column)
           column[:identity] ? 'BIGINT IDENTITY' : super
         end
       end
       
-      # Dataset class for H2 datasets accessed via JDBC.
       class Dataset < JDBC::Dataset
         ILIKE_PLACEHOLDER = ["CAST(".freeze, " AS VARCHAR_IGNORECASE)".freeze].freeze
-
-        APOS = "'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :APOS)
-        HSTAR = "H*".freeze
-        Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-        TIME_FORMAT = "'%H:%M:%S'".freeze
-        Sequel::Deprecation.deprecate_constant(self, :TIME_FORMAT)
-        ONLY_OFFSET = " LIMIT -1 OFFSET ".freeze
-        Sequel::Deprecation.deprecate_constant(self, :ONLY_OFFSET)
 
         # Emulate the case insensitive LIKE operator and the bitwise operators.
         def complex_expression_sql_append(sql, op, args)

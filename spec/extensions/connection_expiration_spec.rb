@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), "spec_helper")
+require_relative "spec_helper"
 
 connection_expiration_specs = shared_description do
   describe "connection expiration" do
@@ -109,13 +109,13 @@ end
 
 describe "Sequel::ConnectionExpiration with threaded pool" do
   before do
-    @db = Sequel.mock
+    @db = Sequel.mock(:test=>false)
   end
   include connection_expiration_specs
 end
 describe "Sequel::ConnectionExpiration with sharded threaded pool" do
   before do
-    @db = Sequel.mock(:servers=>{})
+    @db = Sequel.mock(:test=>false, :servers=>{})
   end
   include connection_expiration_specs
 end

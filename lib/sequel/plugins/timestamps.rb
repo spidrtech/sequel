@@ -15,11 +15,11 @@ module Sequel
     #   Sequel::Model.plugin :timestamps
     #
     #   # Timestamp Album instances, with custom column names
-    #   Album.plugin :timestamps, :create=>:created_on, :update=>:updated_on
+    #   Album.plugin :timestamps, create: :created_on, update: :updated_on
     #
     #   # Timestamp Artist instances, forcing an overwrite of the create
     #   # timestamp, and setting the update timestamp when creating
-    #   Album.plugin :timestamps, :force=>true, :update_on_create=>true
+    #   Album.plugin :timestamps, force: true, update_on_create: true
     module Timestamps
       # Configure the plugin by setting the available options.  Note that
       # if this method is run more than once, previous settings are ignored,
@@ -30,7 +30,7 @@ module Sequel
       # :update :: The field to hold the update timestamp (default: :updated_at)
       # :update_on_create :: Whether to set the update timestamp to the create timestamp when creating (default: false)
       def self.configure(model, opts=OPTS)
-        model.instance_eval do
+        model.instance_exec do
           @allow_manual_timestamp_update = opts[:allow_manual_update]||false
           @create_timestamp_field = opts[:create]||:created_at
           @update_timestamp_field = opts[:update]||:updated_at
@@ -58,7 +58,6 @@ module Sequel
           :@set_update_timestamp_on_create=>nil,
           :@update_timestamp_field=>nil)
         
-        
         # Whether to allow manual setting of the update timestamp when creating
         def allow_manual_timestamp_update?
           @allow_manual_timestamp_update
@@ -77,14 +76,14 @@ module Sequel
           super
         end
         
-        private
-        
         # Set the create timestamp when creating
-        def _before_validation
+        def before_validation
           set_create_timestamp if new?
           super
         end
         
+        private
+
         # If the object has accessor methods for the create timestamp field, and
         # the create timestamp value is nil or overwriting it is allowed, set the
         # create timestamp field to the time given or the current time.  If setting

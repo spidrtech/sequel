@@ -22,17 +22,13 @@ module Sequel
     #   Sequel::Model.plugin :touch
     #
     #   # Allow touching of Album instances, with a custom column
-    #   Album.plugin :touch, :column=>:updated_on
+    #   Album.plugin :touch, column: :updated_on
     #
     #   # Allow touching of Artist instances, updating the albums and tags
     #   # associations when touching, touching the +updated_on+ column for
     #   # albums and the +updated_at+ column for tags
-    #   Artist.plugin :touch, :associations=>[{:albums=>:updated_on}, :tags]
+    #   Artist.plugin :touch, associations: [{albums: :updated_on}, :tags]
     module Touch
-      # The default column to update when touching
-      TOUCH_COLUMN_DEFAULT = :updated_at
-      Sequel::Deprecation.deprecate_constant(self, :TOUCH_COLUMN_DEFAULT)
-
       def self.apply(model, opts=OPTS)
         model.instance_variable_set(:@touched_associations, {})
       end
@@ -131,13 +127,13 @@ module Sequel
           model.touched_associations.each do |assoc, column|
             r = model.association_reflection(assoc)
             next unless r.can_have_associated_objects?(self)
-            ds = send(r.dataset_method)
+            ds = public_send(r[:dataset_method])
 
             if ds.send(:joined_dataset?)
               # Can't update all values at once, so update each instance individually.
               # Instead if doing a simple save, update via the instance's dataset,
               # to avoid going into an infinite loop in some cases.
-              send(assoc).each{|x| x.this.update(column=>touch_association_value)}
+              public_send(assoc).each{|x| x.this.update(column=>touch_association_value)}
             else
               # Update all values at once for performance reasons.
               ds.update(column=>touch_association_value)

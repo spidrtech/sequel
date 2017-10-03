@@ -5,7 +5,7 @@
 #
 # This extension integrates with Sequel's native postgres and jdbc/postgresql
 # adapters, so that when inet/cidr fields are retrieved, they are returned as
-# IPAddr instances
+# IPAddr instances.
 #
 # To use this extension, load it into your database:
 #
@@ -29,7 +29,6 @@
 # Related module: Sequel::Postgres::InetDatabaseMethods
 
 require 'ipaddr'
-Sequel.require 'adapters/shared/postgres'
 
 module Sequel
   module Postgres
@@ -39,7 +38,7 @@ module Sequel
       # it will pick up the inet/cidr converter.  Also, extend the datasets
       # with support for literalizing the IPAddr types.
       def self.extended(db)
-        db.instance_eval do
+        db.instance_exec do
           extend_datasets(InetDatasetMethods)
           meth = IPAddr.method(:new)
           add_conversion_proc(869, meth)
@@ -47,7 +46,7 @@ module Sequel
           if respond_to?(:register_array_type)
             register_array_type('inet', :oid=>1041, :scalar_oid=>869)
             register_array_type('cidr', :oid=>651, :scalar_oid=>650)
-            register_array_type('macaddr', :oid=>1040)
+            register_array_type('macaddr', :oid=>1040, :scalar_oid=>829)
           end
           @schema_type_classes[:ipaddr] = IPAddr
         end
@@ -111,18 +110,6 @@ module Sequel
           super
         end
       end
-    end
-
-    # SEQUEL5: Remove
-    meth = IPAddr.method(:new)
-    PG__TYPES[869] = PG__TYPES[650] = lambda do |s|
-      Sequel::Deprecation.deprecate("Conversion proc for inet/cidr added globally by pg_inet extension", "Load the pg_inet extension into the Database instance")
-      IPAddr.new(s)
-    end
-    if defined?(PGArray) && PGArray.respond_to?(:register)
-      PGArray.register('inet', :oid=>1041, :scalar_oid=>869, :skip_deprecation_warning=>true)
-      PGArray.register('cidr', :oid=>651, :scalar_oid=>650, :skip_deprecation_warning=>true)
-      PGArray.register('macaddr', :oid=>1040, :skip_deprecation_warning=>true)
     end
   end
 

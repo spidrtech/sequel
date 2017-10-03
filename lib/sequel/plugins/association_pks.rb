@@ -12,6 +12,8 @@ module Sequel
     #   artist.album_pks # [1, 2, 3]
     #   artist.album_pks = [2, 4]
     #   artist.album_pks # [2, 4]
+    #   artist.save
+    #   # Persist changes
     #
     # Note that it uses the singular form of the association name. Also note
     # that the setter both associates to new primary keys not in the assocation
@@ -22,18 +24,9 @@ module Sequel
     # not call any callbacks.  If you have any association callbacks,
     # you probably should not use the setter methods.
     #
-    # If an association uses the :delay_pks option, you can set the associated
-    # pks for new objects, and the setting will not be persisted until after the
-    # object has been created in the database.  Additionally, if an association
-    # uses the :delay_pks=>:always option, you can set the associated pks for existing
-    # objects, and the setting will not be persisted until after the object has
-    # been saved.
-    #
-    # SEQUEL5: Starting in Sequel 5, the :delay_pks association option will default
-    # to :delay_pks=>:always.  If you would like to use the Sequel 4 behavior of
-    # having the setter make modifications immediately, explicitly use the
-    # :delay_pks=>false option.  Additionally, Sequel 5 will not support the current
-    # :delay_pks=>true behavior, treating it as :delay_pks=>:always.
+    # By default, changes to the association will not happen until the object
+    # is saved.  However, using the delay_pks: false option, you can have the
+    # changes made immediately when the association_pks setter method is called.
     #
     # By default, if you pass a nil value to the setter, an exception will be raised.
     # You can change this behavior by using the :association_pks_nil association option.
@@ -95,7 +88,7 @@ module Sequel
               rpk = opts.associated_class.primary_key
               opts.associated_dataset.
                 naked.where(cond).
-                select_map(Sequel.send(rpk.is_a?(Array) ? :deep_qualify : :qualify, opts.associated_class.table_name, rpk))
+                select_map(Sequel.public_send(rpk.is_a?(Array) ? :deep_qualify : :qualify, opts.associated_class.table_name, rpk))
             end
           elsif clpk
             lambda do
@@ -111,7 +104,7 @@ module Sequel
           if !opts[:read_only] && !join_associated_table
             opts[:pks_setter] = lambda do |pks|
               if pks.empty?
-                send(opts.remove_all_method)
+                public_send(opts[:remove_all_method])
               else
                 checked_transaction do
                   if clpk
@@ -146,13 +139,13 @@ module Sequel
           key = opts[:key]
 
           opts[:pks_getter] = lambda do
-            send(opts.dataset_method).select_map(opts.associated_class.primary_key)
+            public_send(opts[:dataset_method]).select_map(opts.associated_class.primary_key)
           end
 
           unless opts[:read_only]
             opts[:pks_setter] = lambda do |pks|
               if pks.empty?
-                send(opts.remove_all_method)
+                public_send(opts[:remove_all_method])
               else
                 primary_key = opts.associated_class.primary_key
                 pkh = {primary_key=>pks}
@@ -170,7 +163,7 @@ module Sequel
                 end
 
                 checked_transaction do
-                  ds = send(opts.dataset_method)
+                  ds = public_send(opts.dataset_method)
                   ds.unfiltered.where(pkh).update(h)
                   ds.exclude(pkh).update(nh)
                 end
@@ -207,10 +200,10 @@ module Sequel
         # If the receiver is a new object, return any saved
         # pks, or an empty array if no pks have been saved.
         def _association_pks_getter(opts)
-          delay = opts[:delay_pks]
+          delay = opts.fetch(:delay_pks, true)
           if new? && delay
             (@_association_pks ||= {})[opts[:name]] ||= []
-          elsif delay == :always && @_association_pks && (objs = @_association_pks[opts[:name]])
+          elsif delay && @_association_pks && (objs = @_association_pks[opts[:name]])
             objs
           else
             instance_exec(&opts[:pks_getter])
@@ -219,7 +212,7 @@ module Sequel
 
         # Update which objects are associated to the receiver.
         # If the receiver is a new object, save the pks
-        # so the update can happen after the received has been saved.
+        # so the update can happen after the receiver has been saved.
         def _association_pks_setter(opts, pks)
           if pks.nil?
             case opts[:association_pks_nil]
@@ -234,17 +227,10 @@ module Sequel
 
           pks = convert_pk_array(opts, pks)
 
-          delay = opts.fetch(:delay_pks) do
-            Sequel::Deprecation.deprecate("association_pks will default to assuming the :delay_pks=>:always association option starting in Sequel 5.  Explicitly set :delay_pks=>false option for the association if you want changes to take effect immediately instead of being delayed until the object is saved (association: #{opts.inspect})")
-            false
-          end
-          if (new? && delay) || (delay == :always)
+          if opts.fetch(:delay_pks, true)
             modified!
             (@_association_pks ||= {})[opts[:name]] = pks
           else
-            if !new? && delay && delay != :always
-              Sequel::Deprecation.deprecate("association_pks with the :delay_pks=>true association option will also delay setting of associated values for existing objects in Sequel 5 (currently it just delays setting of associated values for new objects).  Please change to using :delay_pks=>:always to avoid this message.  Sequel 5 will not support the existing :delay_pks=>true behavior for only delaying for new objects and not for existing objects")
-            end
             instance_exec(pks, &opts[:pks_setter])
           end
         end

@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
+require_relative "spec_helper"
 
 describe "Class Table Inheritance Plugin" do
   before(:all) do
@@ -26,7 +26,7 @@ describe "Class Table Inheritance Plugin" do
   before do
     [:staff, :executives, :managers, :employees].each{|t| @db[t].delete}
     class ::Employee < Sequel::Model(@db)
-      plugin :class_table_inheritance, :key=>:kind, :table_map=>{:Staff=>:staff}, :alias=>:employees
+      plugin :class_table_inheritance, :key=>:kind, :table_map=>{:Staff=>:staff}
     end 
     class ::Manager < Employee
       one_to_many :staff_members, :class=>:Staff
@@ -570,7 +570,7 @@ describe "Touch plugin" do
     @album.updated_at.to_i.must_be_close_to Time.now.to_i, 2
   end
   
-  cspecify "should update the timestamp column for many_to_one associated records when the record is updated or destroyed", [:do, :sqlite], [:jdbc, :sqlite], [:swift] do
+  cspecify "should update the timestamp column for many_to_one associated records when the record is updated or destroyed", [:jdbc, :sqlite] do
     Album.many_to_one :artist
     Album.plugin :touch, :associations=>:artist
     @artist.updated_at.must_be_nil
@@ -590,7 +590,7 @@ describe "Touch plugin" do
     end
   end
 
-  cspecify "should update the timestamp column for one_to_many associated records when the record is updated", [:do, :sqlite], [:jdbc, :sqlite], [:swift] do
+  cspecify "should update the timestamp column for one_to_many associated records when the record is updated", [:jdbc, :sqlite] do
     Artist.one_to_many :albums
     Artist.plugin :touch, :associations=>:albums
     @album.updated_at.must_be_nil
@@ -603,7 +603,7 @@ describe "Touch plugin" do
     end
   end
 
-  cspecify "should update the timestamp column for many_to_many associated records when the record is updated", [:do, :sqlite], [:jdbc, :sqlite], [:swift] do
+  cspecify "should update the timestamp column for many_to_many associated records when the record is updated", [:jdbc, :sqlite] do
     Artist.many_to_many :albums
     Artist.plugin :touch, :associations=>:albums
     @artist.add_album(@album)
@@ -1315,25 +1315,9 @@ describe "AssociationPks plugin" do
     Vocalist.order(:first, :last).all.map{|a| a.hit_pks.sort}.must_equal [[@h1, @h2, @h3], [@h2], []]
   end
 
-  deprecated "should handle :delay_pks=>true association option for new instances" do
+  it "should default to delaying association_pks setter method changes until saving" do
     album_class = Class.new(Album)
     album_class.many_to_many :tags, :clone=>:tags, :delay_pks=>true, :join_table=>:albums_tags, :left_key=>:album_id
-    album = album_class.new(:name=>'test album')
-    album.tag_pks.must_equal []
-    album.tag_pks = [@t1, @t2]
-    album.tag_pks.must_equal [@t1, @t2]
-    album.save
-    album_class.with_pk!(album.pk).tag_pks.sort.must_equal [@t1, @t2]
-
-    album.tag_pks = []
-    album.tag_pks.must_equal []
-    album.save
-    album_class.with_pk!(album.pk).tag_pks.sort.must_equal []
-  end
-
-  it "should handle :delay_pks=>:always association option for existing instances" do
-    album_class = Class.new(Album)
-    album_class.many_to_many :tags, :clone=>:tags, :delay_pks=>:always, :join_table=>:albums_tags, :left_key=>:album_id
     album = album_class.with_pk!(@al1)
     album.tag_pks.sort.must_equal [@t1, @t2, @t3]
     album.tag_pks = [@t1, @t2]

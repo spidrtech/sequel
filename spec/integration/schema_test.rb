@@ -1,4 +1,4 @@
-require File.join(File.dirname(File.expand_path(__FILE__)), 'spec_helper.rb')
+require_relative "spec_helper"
 
 describe "Database schema parser" do
   after do
@@ -215,7 +215,7 @@ describe "Database index parsing" do
     DB.indexes(:items).must_equal({})
   end
 
-  it "should not include partial indexes" do
+  cspecify "should not include partial indexes", [proc{|db| db.sqlite_version < 30808}, :sqlite] do
     DB.create_table!(:items){Integer :n; Integer :a; index :n, :where=>proc{n > 10}}
     DB.indexes(:items).must_equal({})
   end if DB.supports_partial_indexes?
@@ -610,7 +610,7 @@ describe "Database schema modifiers" do
     @ds.all.must_equal [{:id2=>10}]
   end
 
-  cspecify "should set column NULL/NOT NULL correctly", [:jdbc, :db2], [:db2] do
+  cspecify "should set column NULL/NOT NULL correctly", [:jdbc, :db2] do
     @db.create_table!(:items, :engine=>:InnoDB){Integer :id}
     @ds.insert(:id=>10)
     @db.alter_table(:items){set_column_allow_null :id, false}
@@ -632,7 +632,7 @@ describe "Database schema modifiers" do
     @ds.all.must_equal [{:id=>10}, {:id=>20}]
   end
 
-  cspecify "should set column types correctly", [:jdbc, :db2], [:db2], :oracle do
+  cspecify "should set column types correctly", [:jdbc, :db2], :oracle do
     @db.create_table!(:items){Integer :id}
     @ds.insert(:id=>10)
     @db.alter_table(:items){set_column_type :id, String}
@@ -642,7 +642,7 @@ describe "Database schema modifiers" do
     @ds.order(:id).all.must_equal [{:id=>"10"}, {:id=>"20"}]
   end
 
-  cspecify "should set column types without modifying NULL/NOT NULL", [:jdbc, :db2], [:db2], :oracle, :derby do
+  cspecify "should set column types without modifying NULL/NOT NULL", [:jdbc, :db2], :derby do
     @db.create_table!(:items){Integer :id, :null=>false, :default=>2}
     proc{@ds.insert(:id=>nil)}.must_raise(Sequel::NotNullConstraintViolation, Sequel::ConstraintViolation, Sequel::DatabaseError)
     @db.alter_table(:items){set_column_type :id, String}
@@ -655,7 +655,7 @@ describe "Database schema modifiers" do
     @ds.map(:id).must_equal [nil, nil]
   end
 
-  cspecify "should set column types without modifying defaults", [:jdbc, :db2], [:db2], :oracle, :derby do
+  cspecify "should set column types without modifying defaults", [:jdbc, :db2], :oracle, :derby do
     @db.create_table!(:items){Integer :id, :default=>0}
     @ds.insert
     @ds.map(:id).must_equal [0]
@@ -760,7 +760,7 @@ describe "Database schema modifiers" do
     @db.schema(:items, :reload=>true).map{|x| x.first}.must_equal [:id]
   end
 
-  cspecify "should work correctly with many operations in a single alter_table call", [:jdbc, :db2], [:db2] do
+  cspecify "should work correctly with many operations in a single alter_table call", [:jdbc, :db2] do
     @db.create_table!(:items) do
       primary_key :id
       String :name2

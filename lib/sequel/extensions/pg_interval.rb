@@ -33,13 +33,10 @@
 # Related module: Sequel::Postgres::IntervalDatabaseMethods
 
 require 'active_support/duration'
-Sequel.require 'adapters/shared/postgres'
 
 module Sequel
   module Postgres
     module IntervalDatabaseMethods
-      EMPTY_INTERVAL = '0'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :EMPTY_INTERVAL)
       DURATION_UNITS = [:years, :months, :weeks, :days, :hours, :minutes, :seconds].freeze
 
       # Return an unquoted string version of the duration object suitable for
@@ -64,10 +61,6 @@ module Sequel
 
       # Creates callable objects that convert strings into ActiveSupport::Duration instances.
       class Parser
-        # Regexp that parses the full range of PostgreSQL interval type output.
-        PARSER = /\A([+-]?\d+ years?\s?)?([+-]?\d+ mons?\s?)?([+-]?\d+ days?\s?)?(?:(?:([+-])?(\d{2,10}):(\d\d):(\d\d(\.\d+)?))|([+-]?\d+ hours?\s?)?([+-]?\d+ mins?\s?)?([+-]?\d+(\.\d+)? secs?\s?)?)?\z/
-        Sequel::Deprecation.deprecate_constant(self, :PARSER)
-
         # Parse the interval input string into an ActiveSupport::Duration instance.
         def call(string)
           raise(InvalidValue, "invalid or unhandled interval format: #{string.inspect}") unless matches = /\A([+-]?\d+ years?\s?)?([+-]?\d+ mons?\s?)?([+-]?\d+ days?\s?)?(?:(?:([+-])?(\d{2,10}):(\d\d):(\d\d(\.\d+)?))|([+-]?\d+ hours?\s?)?([+-]?\d+ mins?\s?)?([+-]?\d+(\.\d+)? secs?\s?)?)?\z/.match(string)
@@ -121,7 +114,7 @@ module Sequel
       # Reset the conversion procs if using the native postgres adapter,
       # and extend the datasets to correctly literalize ActiveSupport::Duration values.
       def self.extended(db)
-        db.instance_eval do
+        db.instance_exec do
           extend_datasets(IntervalDatasetMethods)
           add_conversion_proc(1186, Postgres::IntervalDatabaseMethods::PARSER)
           if respond_to?(:register_array_type)
@@ -175,9 +168,6 @@ module Sequel
     end
 
     module IntervalDatasetMethods
-      CAST_INTERVAL = '::interval'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CAST_INTERVAL)
-
       # Handle literalization of ActiveSupport::Duration objects, treating them as
       # PostgreSQL intervals.
       def literal_other_append(sql, v)
@@ -189,15 +179,6 @@ module Sequel
           super
         end
       end
-    end
-
-    # SEQUEL5: Remove
-    PG__TYPES[1186] = lambda do |s|
-      Sequel::Deprecation.deprecate("Conversion proc for interval added globally by pg_interval extension", "Load the pg_interval extension into the Database instance")
-      Postgres::IntervalDatabaseMethods::PARSER.call(s)
-    end
-    if defined?(PGArray) && PGArray.respond_to?(:register)
-      PGArray.register('interval', :oid=>1187, :scalar_oid=>1186, :skip_deprecation_warning=>true)
     end
   end
 

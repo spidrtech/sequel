@@ -1,7 +1,7 @@
 # frozen-string-literal: true
 
 Sequel::JDBC.load_driver('com.microsoft.sqlserver.jdbc.SQLServerDriver')
-Sequel.require 'adapters/jdbc/mssql'
+require_relative 'mssql'
 
 module Sequel
   module JDBC
@@ -14,17 +14,6 @@ module Sequel
       end
     end
 
-    # SEQUEL5: Remove
-    class Type_Convertor
-      def MSSQLRubyTime(r, i)
-        if v = r.getString(i)
-          Sequel.string_to_time("#{v}")
-        end
-      end
-    end
-
-    # Database and Dataset instance methods for SQLServer specific
-    # support via JDBC.
     module SQLServer
       def self.MSSQLRubyTime(r, i)
         # MSSQL-Server TIME should be fetched as string to keep the precision intact, see:
@@ -34,7 +23,6 @@ module Sequel
         end
       end
 
-      # Database instance methods for SQLServer databases accessed via JDBC.
       module DatabaseMethods
         include Sequel::JDBC::MSSQL::DatabaseMethods
 

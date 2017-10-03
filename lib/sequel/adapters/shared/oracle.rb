@@ -1,24 +1,19 @@
 # frozen-string-literal: true
 
-Sequel.require 'adapters/utils/emulate_offset_with_row_number'
+require_relative '../utils/emulate_offset_with_row_number'
 
 module Sequel
   module Oracle
     Sequel::Database.set_shared_adapter_scheme(:oracle, self)
     
     def self.mock_adapter_setup(db)
-      db.instance_eval do
+      db.instance_exec do
         @server_version = 11000000
         @primary_key_sequences = {}
       end
     end
 
     module DatabaseMethods
-      TEMPORARY = 'GLOBAL TEMPORARY '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :TEMPORARY)
-      AUTOINCREMENT = ''.freeze
-      Sequel::Deprecation.deprecate_constant(self, :AUTOINCREMENT)
-
       attr_accessor :autosequence
 
       def create_sequence(name, opts=OPTS)
@@ -37,7 +32,6 @@ module Sequel
         self << drop_sequence_sql(name)
       end
 
-      # Oracle uses the :oracle database type
       def database_type
         :oracle
       end
@@ -88,7 +82,7 @@ module Sequel
         false
       end
 
-      IGNORE_OWNERS = %w'APEX_040000 CTXSYS EXFSYS MDSYS OLAPSYS ORDDATA ORDSYS SYS SYSTEM XDB XDBMETADATA XDBPM XFILES WMSYS'#.freeze # SEQUEL5
+      IGNORE_OWNERS = %w'APEX_040000 CTXSYS EXFSYS MDSYS OLAPSYS ORDDATA ORDSYS SYS SYSTEM XDB XDBMETADATA XDBPM XFILES WMSYS'.freeze
 
       def tables(opts=OPTS)
         m = output_identifier_meth
@@ -146,7 +140,6 @@ module Sequel
 
       private
 
-      # Handle Oracle specific ALTER TABLE SQL
       def alter_table_sql(table, op)
         case op[:op]
         when :add_column
@@ -253,7 +246,7 @@ module Sequel
       TRANSACTION_ISOLATION_LEVELS = {:uncommitted=>'READ COMMITTED'.freeze,
         :committed=>'READ COMMITTED'.freeze,
         :repeatable=>'SERIALIZABLE'.freeze,
-        :serializable=>'SERIALIZABLE'.freeze}#.freeze # SEQUEL5
+        :serializable=>'SERIALIZABLE'.freeze}.freeze
       # Oracle doesn't support READ UNCOMMITTED OR REPEATABLE READ transaction
       # isolation levels, so upgrade to the next highest level in those cases.
       def set_transaction_isolation_sql(level)
@@ -321,31 +314,6 @@ module Sequel
     module DatasetMethods
       ROW_NUMBER_EXPRESSION = LiteralString.new('ROWNUM').freeze
       BITAND_PROC = lambda{|a, b| Sequel.lit(["CAST(BITAND(", ", ", ") AS INTEGER)"], a, b)}
-
-      SPACE = ' '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SPACE)
-      APOS = "'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS)
-      APOS_RE = /'/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS_RE)
-      DOUBLE_APOS = "''".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_APOS)
-      FROM = ' FROM '.freeze
-      Sequel::Deprecation.deprecate_constant(self, :FROM)
-      TIMESTAMP_FORMAT = "TIMESTAMP '%Y-%m-%d %H:%M:%S%N %z'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :TIMESTAMP_FORMAT)
-      TIMESTAMP_OFFSET_FORMAT = "%+03i:%02i".freeze
-      Sequel::Deprecation.deprecate_constant(self, :TIMESTAMP_OFFSET_FORMAT)
-      BOOL_FALSE = "'N'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-      BOOL_TRUE = "'Y'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-      HSTAR = "H*".freeze
-      Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-      DUAL = ' FROM DUAL'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DUAL)
-      SKIP_LOCKED = " SKIP LOCKED".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SKIP_LOCKED)
 
       include(Module.new do
         Dataset.def_sql_method(self, :select, %w'with select distinct columns from join where group having compounds order limit lock')
@@ -418,7 +386,8 @@ module Sequel
         clone(:sequence=>s)
       end
 
-      # Handle LIMIT by using a unlimited subselect filtered with ROWNUM.
+      # Handle LIMIT by using a unlimited subselect filtered with ROWNUM,
+      # unless Oracle 12 is used.
       def select_sql
         return super if @opts[:sql]
         return super if supports_fetch_next_rows?
@@ -467,6 +436,7 @@ module Sequel
           sql << " ROWS ONLY"
         end
       end
+
       # Oracle requires recursive CTEs to have column aliases.
       def recursive_cte_requires_column_aliases?
         true
@@ -481,7 +451,8 @@ module Sequel
         false
       end
 
-      # Oracle supports FETCH NEXT ROWS since 12c
+      # Oracle supports FETCH NEXT ROWS since 12c, but it doesn't work when
+      # locking or when skipping locked rows.
       def supports_fetch_next_rows?
         server_version >= 12000000 && !(@opts[:lock] || @opts[:skip_locked])
       end
@@ -551,7 +522,7 @@ module Sequel
         db.server_version(@opts[:server])
       end
 
-      # Oracle supports pattern matching via regular expressions
+      # Oracle 10+ supports pattern matching via regular expressions
       def supports_regexp?
         server_version >= 10010002
       end
@@ -565,7 +536,8 @@ module Sequel
       end
 
       # Oracle doesn't support the use of AS when aliasing a dataset.  It doesn't require
-      # the use of AS anywhere, so this disables it in all cases.
+      # the use of AS anywhere, so this disables it in all cases.  Oracle also does not support
+      # derived column lists in aliases.
       def as_sql_append(sql, aliaz, column_aliases=nil)
         raise Error, "oracle does not support derived column lists" if column_aliases
         sql << ' '
@@ -581,7 +553,7 @@ module Sequel
         ' FROM DUAL'
       end
 
-      # There is no function on Microsoft SQL Server that does character length
+      # There is no function on Oracle that does character length
       # and respects trailing spaces (datalength respects trailing spaces, but
       # counts bytes instead of characters).  Use a hack to work around the
       # trailing spaces issue.

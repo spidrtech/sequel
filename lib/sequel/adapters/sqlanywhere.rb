@@ -1,11 +1,9 @@
 # frozen-string-literal: true
 
 require 'sqlanywhere'
-
-Sequel.require %w'shared/sqlanywhere', 'adapters'
+require_relative 'shared/sqlanywhere'
 
 module Sequel
-  # Module for holding all SqlAnywhere-related classes and modules for Sequel.
   module SqlAnywhere
 
     class SQLAnywhereException < StandardError
@@ -27,9 +25,6 @@ module Sequel
       def time(s) ::Sequel.string_to_time(s) end
     end.new
 
-    TYPE_TRANSLATOR = tt
-    Sequel::Deprecation.deprecate_constant(self, :TYPE_TRANSLATOR)
-
     SQLANYWHERE_TYPES = {}
     {
         [0, 484] => tt.method(:decimal),
@@ -40,14 +35,10 @@ module Sequel
     }.each do |k,v|
       k.each{|n| SQLANYWHERE_TYPES[n] = v}
     end
-    # SQLANYWHERE_TYPES.freeze # SEQUEL5
+    SQLANYWHERE_TYPES.freeze
 
-    # Database class for SQLAnywhere databases used with Sequel.
     class Database < Sequel::Database
       include Sequel::SqlAnywhere::DatabaseMethods
-
-      DEFAULT_CONFIG = { :user => 'dba', :password => 'sql' }
-      Sequel::Deprecation.deprecate_constant(self, :DEFAULT_CONFIG)
 
       attr_accessor :api
 
@@ -79,12 +70,10 @@ module Sequel
         conn
       end
 
-      # Closes given database connection.
       def disconnect_connection(c)
         @api.sqlany_disconnect(c)
       end
 
-      # Returns number of rows affected
       def execute_dui(sql, opts=OPTS)
         synchronize(opts[:server]) do |conn|
           _execute(conn, :rows, sql, opts)
@@ -110,8 +99,6 @@ module Sequel
 
       private
 
-      LAST_INSERT_ID = 'SELECT @@IDENTITY'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :LAST_INSERT_ID)
       def _execute(conn, type, sql, opts)
         unless rs = log_connection_yield(sql, conn){@api.sqlany_execute_direct(conn, sql)}
           result, errstr = @api.sqlany_error(conn)
@@ -132,6 +119,7 @@ module Sequel
       end
 
       def adapter_initialize
+        @convert_smallint_to_bool = true
         @conversion_procs = SQLANYWHERE_TYPES.dup
         @conversion_procs[392] = method(:to_application_timestamp_sa)
         @api = SQLAnywhere::SQLAnywhereInterface.new
@@ -148,22 +136,15 @@ module Sequel
       end
     end
 
-    # Dataset class for SqlAnywhere datasets accessed via the native driver.
     class Dataset < Sequel::Dataset
       include Sequel::SqlAnywhere::DatasetMethods
 
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
-
-      # Yield all rows matching this dataset.  If the dataset is set to
-      # split multiple statements, yield arrays of hashes one per statement
-      # instead of yielding results for all statements as hashes.
       def fetch_rows(sql)
         db = @db
         cps = db.conversion_procs
         api = db.api
         execute(sql) do |rs|
-          convert = (convert_smallint_to_bool and db.convert_smallint_to_bool)
+          convert = convert_smallint_to_bool
           col_infos = []
           api.sqlany_num_cols(rs).times do |i|
             _, _, name, _, type = api.sqlany_get_column_info(rs, i)

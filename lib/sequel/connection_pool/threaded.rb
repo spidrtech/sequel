@@ -3,12 +3,8 @@
 # A connection pool allowing multi-threaded access to a pool of connections.
 # This is the default connection pool used by Sequel.
 class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
-  # Whether or not a ConditionVariable should be used to wait for connections.
-  # True except on ruby 1.8, where ConditionVariable#wait does not support a
-  # timeout.
-  unless defined?(USE_WAITER)
-    USE_WAITER = RUBY_VERSION >= '1.9'
-  end
+  USE_WAITER = true
+  Sequel::Deprecation.deprecate_constant(self, :USE_WAITER)
 
   # The maximum number of connections this pool will create (per shard/server
   # if sharding).
@@ -22,15 +18,10 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
   attr_reader :allocated
 
   # The following additional options are respected:
-  # * :connection_handling - Set how to handle available connections.  By default,
-  #   uses a a queue for fairness.  Can be set to :stack to use a stack, which may
-  #   offer better performance.
-  # * :max_connections - The maximum number of connections the connection pool
-  #   will open (default 4)
-  # * :pool_sleep_time - The amount of time to sleep before attempting to acquire
-  #   a connection again, only used on ruby 1.8. (default 0.001)
-  # * :pool_timeout - The amount of seconds to wait to acquire a connection
-  #   before raising a PoolTimeoutError (default 5)
+  # :max_connections :: The maximum number of connections the connection pool
+  #                     will open (default 4)
+  # :pool_timeout :: The amount of seconds to wait to acquire a connection
+  #                  before raising a PoolTimeoutError (default 5)
   def initialize(db, opts = OPTS)
     super
     @max_size = Integer(opts[:max_connections] || 4)
@@ -40,14 +31,7 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
     @available_connections = []
     @allocated = {}
     @timeout = Float(opts[:pool_timeout] || 5)
-
-    if USE_WAITER
-      @waiter = ConditionVariable.new
-    else
-      # :nocov:
-      @sleep_time = Float(opts[:pool_sleep_time] || 0.001)
-      # :nocov:
-    end
+    @waiter = ConditionVariable.new
   end
   
   # Yield all of the available connections, and the one currently allocated to
@@ -70,7 +54,7 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
   # being used.  If you want to be able to disconnect connections that are
   # currently in use, use the ShardedThreadedConnectionPool, which can do that.
   # This connection pool does not, for performance reasons. To use the sharded pool,
-  # pass the <tt>:servers=>{}</tt> option when connecting to the database.
+  # pass the <tt>servers: {}</tt> option when connecting to the database.
   # 
   # Once a connection is requested using #hold, the connection pool
   # creates new connections to the database.
@@ -79,6 +63,7 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
     sync do
       conns = @available_connections.dup
       @available_connections.clear
+      @waiter.signal
     end
     conns.each{|conn| disconnect_connection(conn)}
   end
@@ -95,8 +80,7 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
   # If no connection is immediately available and the pool is already using the maximum
   # number of connections, Pool#hold will block until a connection
   # is available or the timeout expires.  If the timeout expires before a
-  # connection can be acquired, a Sequel::PoolTimeout is 
-  # raised.
+  # connection can be acquired, a Sequel::PoolTimeout is raised.
   def hold(server=nil)
     t = Thread.current
     if conn = owned_connection(t)
@@ -110,7 +94,10 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
         oconn = conn
         conn = nil
         disconnect_connection(oconn) if oconn
-        @allocated.delete(t)
+        sync do 
+          @allocated.delete(t)
+          @waiter.signal
+        end
       end
       raise
     ensure
@@ -123,109 +110,102 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
   end
   
   # The total number of connections opened, either available or allocated.
-  # This may not be completely accurate as it isn't protected by the mutex.
+  # The calling code should not have the mutex before calling this.
   def size
-    @allocated.length + @available_connections.length
+    @mutex.synchronize{_size}
   end
   
   private
 
+  # The total number of connections opened, either available or allocated.
+  # The calling code should already have the mutex before calling this.
+  def _size
+    @allocated.length + @available_connections.length
+  end
+
   # Assigns a connection to the supplied thread, if one
-  # is available. The calling code should already have the mutex when
+  # is available. The calling code should NOT already have the mutex when
   # calling this.
-  def _acquire(thread)
-    if conn = available
-      @allocated[thread] = conn
+  #
+  # This should return a connection is one is available within the timeout,
+  # or nil if a connection could not be acquired within the timeout.
+  def acquire(thread)
+    if conn = assign_connection(thread)
+      return conn
     end
-  end
-  
-  if USE_WAITER
-    # Assigns a connection to the supplied thread, if one
-    # is available. The calling code should NOT already have the mutex when
-    # calling this.
-    #
-    # This should return a connection is one is available within the timeout,
-    # or nil if a connection could not be acquired within the timeout.
-    def acquire(thread)
+
+    time = Time.now
+
+    sync do
+      @waiter.wait(@mutex, @timeout)
+      if conn = next_available
+        return(@allocated[thread] = conn)
+      end
+    end
+
+    until conn = assign_connection(thread)
+      deadline ||= time + @timeout
+      current_time = Time.now
+      raise_pool_timeout(current_time - time) if current_time > deadline
+
+      # :nocov:
+      # It's difficult to get to this point, it can only happen if there is a race condition
+      # where a connection cannot be acquired even after the thread is signalled by the condition
       sync do
-        if conn = _acquire(thread)
-          return conn
-        end
-
-        time = Time.now
-        @waiter.wait(@mutex, @timeout)
-
-        # Not sure why this is helpful, but calling Thread.pass after conditional
-        # variable access dramatically increases reliability when under heavy
-        # resource contention (almost eliminating timeouts), at a small cost to
-        # runtime performance.
-        Thread.pass
-
-        until conn = _acquire(thread)
-          deadline ||= time + @timeout
-          current_time = Time.now
-          raise_pool_timeout(current_time - time) if current_time > deadline
-          # :nocov:
-          # It's difficult to get to this point, it can only happen if there is a race condition
-          # where a connection cannot be acquired even after the thread is signalled by the condition
-          @waiter.wait(@mutex, deadline - current_time)
-          Thread.pass
-          # :nocov:
-        end
-
-        conn
-      end
-    end
-  else
-    # :nocov:
-    def acquire(thread)
-      unless conn = sync{_acquire(thread)}
-        time = Time.now
-        timeout = time + @timeout
-        sleep_time = @sleep_time
-        sleep sleep_time
-        until conn = sync{_acquire(thread)}
-          raise_pool_timeout(Time.now - time) if Time.now > timeout
-          sleep sleep_time
+        @waiter.wait(@mutex, deadline - current_time)
+        if conn = next_available
+          return(@allocated[thread] = conn)
         end
       end
-      conn
+      # :nocov:
     end
-    # :nocov:
+
+    conn
   end
 
-  # Returns an available connection. If no connection is
-  # available, tries to create a new connection. The calling code should already
-  # have the mutex before calling this.
-  def available
-    next_available || make_new(:default)
+  # Assign a connection to the thread, or return nil if one cannot be assigned.
+  # The caller should NOT have the mutex before calling this.
+  def assign_connection(thread)
+    allocated = @allocated
+
+    do_make_new = false
+    sync do
+      if conn = next_available
+        return(allocated[thread] = conn)
+      end
+
+      if (n = _size) >= (max = @max_size)
+        allocated.keys.each{|t| release(t) unless t.alive?}
+        n = nil
+      end
+
+      if (n || _size) < max
+        do_make_new = allocated[thread] = true
+      end
+    end
+
+    # Connect to the database outside of the connection pool mutex,
+    # as that can take a long time and the connection pool mutex
+    # shouldn't be locked while the connection takes place.
+    if do_make_new
+      begin
+        conn = make_new(:default)
+        sync{allocated[thread] = conn}
+      ensure
+        unless conn
+          sync{allocated.delete(thread)}
+        end
+      end
+    end
+
+    conn
   end
 
   # Return a connection to the pool of available connections, returns the connection.
   # The calling code should already have the mutex before calling this.
   def checkin_connection(conn)
     @available_connections << conn
-    if USE_WAITER
-      @waiter.signal
-      Thread.pass
-    end
     conn
-  end
-
-  unless method_defined?(:default_make_new)
-    # Alias the default make_new method, so subclasses can call it directly.
-    alias default_make_new make_new
-  end
-  
-  # Creates a new connection to the given server if the size of the pool for
-  # the server is less than the maximum size of the pool. The calling code
-  # should already have the mutex before calling this.
-  def make_new(server)
-    if (n = size) >= @max_size
-      @allocated.keys.each{|t| release(t) unless t.alive?}
-      n = nil
-    end
-    super if (n || size) < @max_size
   end
 
   # Return the next available connection in the pool, or nil if there
@@ -246,15 +226,18 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
     sync{@allocated[thread]}
   end
   
-  # Create the maximum number of connections immediately.
+  # Create the maximum number of connections immediately.  The calling code should
+  # NOT have the mutex before calling this.
   def preconnect(concurrent = false)
-    enum = (max_size - size).times
+    enum = (max_size - _size).times
 
-    if concurrent
-      enum.map{Thread.new{make_new(nil)}}.map(&:join).each{|t| checkin_connection(t.value)}
+    conns = if concurrent
+      enum.map{Thread.new{make_new(:default)}}.map(&:value)
     else
-      enum.each{checkin_connection(make_new(nil))}
+      enum.map{make_new(:default)}
     end
+
+    sync{conns.each{|conn| checkin_connection(conn)}}
   end
 
   # Raise a PoolTimeout error showing the current timeout, the elapsed time, and the
@@ -274,6 +257,9 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
     else
       checkin_connection(conn)
     end
+
+    @waiter.signal
+    nil
   end
 
   # Yield to the block while inside the mutex. The calling code should NOT
@@ -281,6 +267,4 @@ class Sequel::ThreadedConnectionPool < Sequel::ConnectionPool
   def sync
     @mutex.synchronize{yield}
   end
-  
-  CONNECTION_POOL__MAP[[false, false]] = self
 end

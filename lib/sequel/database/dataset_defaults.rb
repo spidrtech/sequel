@@ -7,42 +7,6 @@ module Sequel
     # This methods change the default behavior of this database's datasets.
     # ---------------------
 
-    # The default class to use for datasets
-    DatasetClass = Sequel::Dataset
-    Sequel::Deprecation.deprecate_constant(self, :DatasetClass)
-
-    # SEQUEL5: Remove
-    @identifier_input_method = nil
-    @identifier_output_method = nil
-    @quote_identifiers = nil
-    class << self
-      # The identifier input method to use by default for all databases (default: adapter default)
-      attr_reader :identifier_input_method
-
-      # The identifier output method to use by default for all databases (default: adapter default)
-      attr_reader :identifier_output_method
-
-      # Whether to quote identifiers (columns and tables) by default for all databases (default: adapter default)
-      attr_reader :quote_identifiers
-    end
-
-    # Change the default identifier input method to use for all databases,
-    def self.identifier_input_method=(v)
-      Sequel::Deprecation.deprecate("Sequel.identifier_input_method= and Sequel::Database.identifier_input_method=", "Call Sequel::Database#identifier_input_method= instead")
-      @identifier_input_method = v.nil? ? false : v
-    end
-
-    # Change the default identifier output method to use for all databases,
-    def self.identifier_output_method=(v)
-      Sequel::Deprecation.deprecate("Sequel.identifier_output_method= and Sequel::Database.identifier_output_method=", "Call Sequel::Database#identifier_output_method= instead")
-      @identifier_output_method = v.nil? ? false : v
-    end
-
-    def self.quote_identifiers=(v)
-      Sequel::Deprecation.deprecate("Sequel.quote_identifiers= and Sequel::Database.quote_identifiers=", "Call Sequel::Database#quote_identifiers= instead")
-      @quote_identifiers = v
-    end
-
     # The class to use for creating datasets.  Should respond to
     # new with the Database argument as the first argument, and
     # an optional options hash.
@@ -74,7 +38,7 @@ module Sequel
     #
     # Examples:
     #
-    #   # Introspec columns for all of DB's datasets
+    #   # Introspect columns for all of DB's datasets
     #   DB.extend_datasets(Sequel::ColumnsIntrospection)
     #   
     #   # Trace all SELECT queries by printing the SQL and the full backtrace
@@ -112,24 +76,16 @@ module Sequel
     
     # The default dataset class to use for the database
     def dataset_class_default
-      if self.class == Sequel::Database
-        Sequel::Dataset
-      else
-        Sequel::Deprecation.deprecate("Using self.class.const_get(:DatasetClass) to get the default dataset class", "Modify the database adapter to implement Database#dataset_class_default")
-        self.class.const_get(:DatasetClass)
-      end
+      Sequel::Dataset
     end
 
-    # Reset the default dataset used by most Database methods that
-    # create datasets.  Usually done after changes to the identifier
-    # mangling methods.
+    # Reset the default dataset used by most Database methods that create datasets.
     def reset_default_dataset
       Sequel.synchronize{@symbol_literal_cache.clear}
       @default_dataset = dataset
     end
 
-    # Whether to quote identifiers by default for this database, true
-    # by default.
+    # Whether to quote identifiers by default for this database, true by default.
     def quote_identifiers_default
       true
     end

@@ -28,31 +28,16 @@ module Sequel
     #   # Add the instance hook methods just to Album instances
     #   Album.plugin :instance_hooks
     module InstanceHooks
-      BEFORE_HOOKS, AFTER_HOOKS = Sequel::Model::HOOKS.partition{|l| l.to_s.start_with?('before')}
-      Sequel::Deprecation.deprecate_constant(self, :BEFORE_HOOKS)
-      Sequel::Deprecation.deprecate_constant(self, :AFTER_HOOKS)
-      HOOKS = Sequel::Model::HOOKS
-      Sequel::Deprecation.deprecate_constant(self, :HOOKS)
-      
-      # SEQUEL5: Remove
-      DEPRECATION_REPLACEMENTS = {
-        :after_commit=>"Use obj.after_save_hook{obj.db.after_commit{}} instead",
-        :after_destroy_commit=>"Use obj.after_destroy_hook{obj.db.after_commit{}} instead",
-        :after_destroy_rollback=>"Use obj.before_destroy_hook{obj.db.after_rollback{}} instead",
-        :after_rollback=>"Use obj.before_save_hook{obj.db.after_rollback{}} instead"
-      }.freeze
-
       module InstanceMethods 
         Sequel::Model::HOOKS.each{|h| class_eval(<<-END , __FILE__, __LINE__+1)}
           def #{h}_hook(&block)
-            #{"Sequel::Deprecation.deprecate('Sequel::Model##{h}_hook in the instance_hooks plugin', #{DEPRECATION_REPLACEMENTS[h].inspect})" if DEPRECATION_REPLACEMENTS[h]}
             raise Sequel::Error, "can't add hooks to frozen object" if frozen?
             add_instance_hook(:#{h}, &block)
             self
           end
         END
         
-        [:before_create, :before_update, :before_validation].each{|h| class_eval("def #{h}; (@instance_hooks && run_before_instance_hooks(:#{h}) == false) ? false : super end", __FILE__, __LINE__)}
+        [:before_create, :before_update, :before_validation].each{|h| class_eval("def #{h}; run_before_instance_hooks(:#{h}) if @instance_hooks; super end", __FILE__, __LINE__)}
         [:after_create, :after_update].each{|h| class_eval(<<-END, __FILE__, __LINE__ + 1)}
           def #{h}
             super
@@ -67,15 +52,9 @@ module Sequel
         def after_destroy
           super
           return unless @instance_hooks
-          # SEQUEL5: Remove commit/rollback
-          if ad = @instance_hooks[:after_destroy_commit]
-            db.after_commit{ad.each(&:call)}
-          end
           run_after_instance_hooks(:after_destroy)
           @instance_hooks.delete(:after_destroy)
           @instance_hooks.delete(:before_destroy)
-          @instance_hooks.delete(:after_destroy_commit)
-          @instance_hooks.delete(:after_destroy_rollback)
         end
 
         # Run after validation instance hooks.
@@ -89,39 +68,25 @@ module Sequel
         def after_save
           super
           return unless @instance_hooks
-          # SEQUEL5: Remove commit/rollback
-          if (ac = @instance_hooks[:after_commit])
-            db.after_commit{ac.each(&:call)}
-          end
           run_after_instance_hooks(:after_save)
           @instance_hooks.delete(:after_save)
           @instance_hooks.delete(:before_save)
           @instance_hooks.delete(:after_validation)
           @instance_hooks.delete(:before_validation)
-          @instance_hooks.delete(:after_commit)
-          @instance_hooks.delete(:after_rollback)
         end
 
         # Run before_destroy instance hooks.
         def before_destroy
           return super unless @instance_hooks
-          # SEQUEL5: Remove commit/rollback
-          if adr = @instance_hooks[:after_destroy_rollback]
-            db.after_rollback{adr.each(&:call)}
-          end
-          # SEQUEL5: No false checking
-          run_before_instance_hooks(:before_destroy) == false ? false : super
+          run_before_instance_hooks(:before_destroy)
+          super
         end
 
         # Run before_save instance hooks.
         def before_save
           return super unless @instance_hooks
-          # SEQUEL5: Remove commit/rollback
-          if ar = @instance_hooks[:after_rollback]
-            db.after_rollback{ar.each(&:call)}
-          end
-          # SEQUEL5: No false checking
-          run_before_instance_hooks(:before_save) == false ? false : super
+          run_before_instance_hooks(:before_save)
+          super
         end
         
         private
@@ -130,7 +95,7 @@ module Sequel
         # the beginning of the instance hook's array.  For after hooks, add it
         # to the end.
         def add_instance_hook(hook, &block)
-          instance_hooks(hook).send(hook.to_s.start_with?('before') ? :unshift : :push, block)
+          instance_hooks(hook).public_send(hook.to_s.start_with?('before') ? :unshift : :push, block)
         end
         
         # An array of instance level hook blocks for the given hook type.
@@ -143,17 +108,7 @@ module Sequel
         def run_after_instance_hooks(hook)
           instance_hooks(hook).each(&:call)
         end
-
-        # Run all hook blocks of the given hook type.  If a hook block returns false,
-        # immediately return false without running the remaining blocks.
-        def run_before_instance_hooks(hook)
-          instance_hooks(hook).each do |b|
-            if b.call == false
-              Sequel::Deprecation.deprecate("Having #{hook} instance hook block return false to stop evaluation of further #{hook} instance hook blocks", "Instead, call cancel_action inside #{hook} instance hook block")
-              return false
-            end
-          end
-        end
+        alias run_before_instance_hooks run_after_instance_hooks
       end
     end
   end

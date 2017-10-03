@@ -8,7 +8,7 @@
 # PostgreSQL json values that are not arrays or objects, but support
 # is fairly limited and the values do not roundtrip.
 #
-# This extension integrates with Sequel's native postgres adapter, so
+# This extension integrates with Sequel's native postgres and jdbc/postgresql adapters, so
 # that when json fields are retrieved, they are parsed and returned
 # as instances of Sequel::Postgres::JSONArray or
 # Sequel::Postgres::JSONHash (or JSONBArray or JSONBHash for jsonb
@@ -35,8 +35,8 @@
 #
 # So if you want to insert an array or hash into an json database column:
 #
-#   DB[:table].insert(:column=>Sequel.pg_json([1, 2, 3]))
-#   DB[:table].insert(:column=>Sequel.pg_json({'a'=>1, 'b'=>2}))
+#   DB[:table].insert(column: Sequel.pg_json([1, 2, 3]))
+#   DB[:table].insert(column: Sequel.pg_json({'a'=>1, 'b'=>2}))
 #
 # To use this extension, please load it into the Database instance:
 #
@@ -62,15 +62,9 @@
 
 require 'delegate'
 require 'json'
-Sequel.require 'adapters/shared/postgres'
 
 module Sequel
   module Postgres
-    CAST_JSON = '::json'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :CAST_JSON)
-    CAST_JSONB = '::jsonb'.freeze
-    Sequel::Deprecation.deprecate_constant(self, :CAST_JSONB)
-
     # Class representing PostgreSQL JSON/JSONB column array values.
     class JSONArrayBase < DelegateClass(Array)
       include Sequel::SQL::AliasMethods
@@ -133,7 +127,7 @@ module Sequel
     # Methods enabling Database object integration with the json type.
     module JSONDatabaseMethods
       def self.extended(db)
-        db.instance_eval do
+        db.instance_exec do
           add_conversion_proc(114, JSONDatabaseMethods.method(:db_parse_json))
           add_conversion_proc(3802, JSONDatabaseMethods.method(:db_parse_jsonb))
           if respond_to?(:register_array_type)
@@ -186,7 +180,7 @@ module Sequel
         end
       end
 
-      # Handle JSONArray and JSONHash in bound variables
+      # Handle json and jsonb types in bound variables
       def bound_variable_arg(arg, conn)
         case arg
         when JSONArrayBase, JSONHashBase
@@ -198,7 +192,7 @@ module Sequel
 
       private
 
-      # Handle json[] types in bound variables.
+      # Handle json[] and jsonb[] types in bound variables.
       def bound_variable_array(a)
         case a
         when JSONHashBase, JSONArrayBase
@@ -208,7 +202,7 @@ module Sequel
         end
       end
 
-      # Make the column type detection recognize the json type.
+      # Make the column type detection recognize the json types.
       def schema_column_type(db_type)
         case db_type
         when 'json'
@@ -259,20 +253,6 @@ module Sequel
           raise Sequel::InvalidValue, "invalid value for jsonb: #{value.inspect}"
         end
       end
-    end
-
-    # SEQUEL5: Remove
-    PG__TYPES[114] = lambda do |s|
-      Sequel::Deprecation.deprecate("Conversion proc for json added globally by pg_json extension", "Load the pg_json extension into the Database instance")
-      JSONDatabaseMethods.db_parse_json(s)
-    end
-    PG__TYPES[3802] = lambda do |s|
-      Sequel::Deprecation.deprecate("Conversion proc for jsonb added globally by pg_json extension", "Load the pg_json extension into the Database instance")
-      JSONDatabaseMethods.db_parse_jsonb(s)
-    end
-    if defined?(PGArray) && PGArray.respond_to?(:register)
-      PGArray.register('json', :oid=>199, :scalar_oid=>114, :skip_deprecation_warning=>true)
-      PGArray.register('jsonb', :oid=>3807, :scalar_oid=>3802, :skip_deprecation_warning=>true)
     end
   end
 

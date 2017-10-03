@@ -1,41 +1,23 @@
-require 'rubygems'
-require "#{File.dirname(File.dirname(__FILE__))}/sequel_warning.rb"
+require_relative "../sequel_warning"
 
 if ENV['COVERAGE']
-  require File.join(File.dirname(File.expand_path(__FILE__)), "../sequel_coverage")
+  require_relative "../sequel_coverage"
   SimpleCov.sequel_coverage(:filter=>%r{lib/sequel/(\w+\.rb|(dataset|database|model|connection_pool)/\w+\.rb|adapters/mock\.rb)\z})
 end
 
-unless Object.const_defined?('Sequel')
-  $:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../../lib/"))
-  require 'sequel/core'
-end
+$:.unshift(File.join(File.dirname(File.expand_path(__FILE__)), "../../lib/"))
+require_relative "../../lib/sequel/core"
 
 gem 'minitest'
 require 'minitest/autorun'
 require 'minitest/hooks/default'
 require 'minitest/shared_description'
 
-require "#{File.dirname(File.dirname(__FILE__))}/deprecation_helper.rb"
-
-class Minitest::HooksSpec
-  # SEQUEL5: Replace with define_singleton_method
-  def meta_def(obj, name, &block)
-    (class << obj; self end).send(:define_method, name, &block)
-  end
-end
+require_relative '../deprecation_helper'
 
 if ENV['SEQUEL_COLUMNS_INTROSPECTION']
   Sequel.extension :columns_introspection
   Sequel::Database.extension :columns_introspection
-  Sequel.require 'adapters/mock'
+  require_relative '../../lib/sequel/adapters/mock'
   Sequel::Mock::Dataset.send(:include, Sequel::ColumnsIntrospection)
 end
-
-# SEQUEL5: Remove
-output = Sequel::Deprecation.output
-Sequel::Deprecation.output = nil
-Sequel.quote_identifiers = false
-Sequel.identifier_input_method = nil
-Sequel.identifier_output_method = nil
-Sequel::Deprecation.output = output

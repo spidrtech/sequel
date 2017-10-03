@@ -1,36 +1,18 @@
 # frozen-string-literal: true
 
 require 'java'
-Sequel.require 'adapters/utils/stored_procedures'
+require_relative 'utils/stored_procedures'
 
 module Sequel
-  # Houses Sequel's JDBC support when running on JRuby.
   module JDBC
-    # Make it accesing the java.lang hierarchy more ruby friendly.
-    module JavaLang
-      include_package 'java.lang'
-    end
-    Sequel::Deprecation.deprecate_constant(self, :JavaLang)
-    
     # Make it accesing the java.sql hierarchy more ruby friendly.
     module JavaSQL
       include_package 'java.sql'
     end
 
-    # Make it accesing the javax.naming hierarchy more ruby friendly.
-    module JavaxNaming
-      include_package 'javax.naming'
-    end
-    Sequel::Deprecation.deprecate_constant(self, :JavaxNaming)
-
     # Used to identify a jndi connection and to extract the jndi
     # resource name.
     JNDI_URI_REGEXP = /\Ajdbc:jndi:(.+)/
-    
-    # The types to check for 0 scale to transform :decimal types
-    # to :integer.
-    DECIMAL_TYPE_RE = /number|numeric|decimal/io
-    Sequel::Deprecation.deprecate_constant(self, :DECIMAL_TYPE_RE)
     
     # Contains procs keyed on subadapter type that extend the
     # given database object so it supports the correct database type.
@@ -100,8 +82,7 @@ module Sequel
         end
       end
 
-      INSTANCE = new
-      o = INSTANCE
+      o = new
       MAP = Hash.new(o.method(:Object))
       types = Java::JavaSQL::Types
 
@@ -143,16 +124,9 @@ module Sequel
 
       MAP.freeze
       BASIC_MAP.freeze
-      INSTANCE.freeze
-      # freeze # SEQUEL5
+      freeze
     end
 
-    # SEQUEL5: Remove
-    Type_Convertor = TypeConvertor
-    Sequel::Deprecation.deprecate_constant(self, :TypeConvertor)
-
-    # JDBC Databases offer a fairly uniform interface that does not change
-    # much based on the sub adapter.
     class Database < Sequel::Database
       set_adapter_scheme :jdbc
       
@@ -202,7 +176,8 @@ module Sequel
         end
       end
          
-      # Connect to the database using JavaSQL::DriverManager.getConnection.
+      # Connect to the database using JavaSQL::DriverManager.getConnection, and falling back
+      # to driver.new.connect if the driver is known.
       def connect(server)
         opts = server_opts(server)
         conn = if jndi?
@@ -245,8 +220,6 @@ module Sequel
         c.close
       end
       
-      # Execute the given SQL.  If a block is given, if should be a SELECT
-      # statement or something else that returns rows.
       def execute(sql, opts=OPTS, &block)
         return call_sproc(sql, opts, &block) if opts[:sproc]
         return execute_prepared_statement(sql, opts, &block) if [Symbol, Dataset].any?{|c| sql.is_a?(c)}
@@ -273,16 +246,12 @@ module Sequel
       end
       alias execute_dui execute
 
-      # Execute the given DDL SQL, which should not return any
-      # values or rows.
       def execute_ddl(sql, opts=OPTS)
         opts = Hash[opts]
         opts[:type] = :ddl
         execute(sql, opts)
       end
       
-      # Execute the given INSERT SQL, returning the last inserted
-      # row id.
       def execute_insert(sql, opts=OPTS)
         opts = Hash[opts]
         opts[:type] = :insert
@@ -520,27 +489,24 @@ module Sequel
       # Support DateTime objects used in bound variables
       def java_sql_datetime(datetime)
         ts = java.sql.Timestamp.new(Time.local(datetime.year, datetime.month, datetime.day, datetime.hour, datetime.min, datetime.sec).to_i * 1000)
-        ts.setNanos((datetime.sec_fraction * (RUBY_VERSION >= '1.9.0' ?  1000000000 : 86400000000000)).to_i)
+        ts.setNanos((datetime.sec_fraction * 1000000000).to_i)
         ts
       end
 
       # Support fractional seconds for Time objects used in bound variables
       def java_sql_timestamp(time)
         ts = java.sql.Timestamp.new(time.to_i * 1000)
-        # Work around jruby 1.6 ruby 1.9 mode bug # SEQUEL5: Remove workaround
-        ts.setNanos((RUBY_VERSION >= '1.9.0' && time.nsec != 0) ? time.nsec : time.usec * 1000)
+        ts.setNanos(time.nsec)
         ts
       end 
       
-      # Log the given SQL and then execute it on the connection, used by
-      # the transaction code.
       def log_connection_execute(conn, sql)
         statement(conn){|s| log_connection_yield(sql, conn){s.execute(sql)}}
       end
 
       # By default, there is no support for determining the last inserted
       # id, so return nil.  This method should be overridden in
-      # sub adapters.
+      # subadapters.
       def last_insert_id(conn, opts)
         nil
       end
@@ -548,7 +514,7 @@ module Sequel
       # Yield the metadata for this database
       def metadata(*args, &block)
         synchronize do |c|
-          result = c.getMetaData.send(*args)
+          result = c.getMetaData.public_send(*args)
           begin
             metadata_dataset.send(:process_result_set, result, &block)
           ensure
@@ -610,8 +576,7 @@ module Sequel
         cps.setString(i, nil)
       end
       
-      # Return the connection.  Used to do configuration on the
-      # connection object before adding it to the connection pool.
+      # Return the connection.  Can be overridden in subadapters for database specific setup.
       def setup_connection(conn)
         conn
       end
@@ -629,7 +594,6 @@ module Sequel
         end
       end
       
-      # Parse the table schema for the given table.
       def schema_parse_table(table, opts=OPTS)
         m = output_identifier_meth(opts[:dataset])
         schema, table = metadata_schema_and_table(table, opts)
@@ -668,8 +632,7 @@ module Sequel
         ts
       end
       
-      # Whether schema_parse_table should skip the given row when
-      # parsing the schema.
+      # Skip tables in the INFORMATION_SCHEMA when parsing columns.
       def schema_parse_table_skip?(h, schema)
         h[:table_schem] == 'INFORMATION_SCHEMA'
       end
@@ -681,9 +644,8 @@ module Sequel
       # Called before loading subadapter-specific code, necessary so that subadapter initialization code
       # that runs queries works correctly.  This cannot be overriding in subadapters,
       def setup_type_convertor_map_early
-        # SEQUEL5: Change back to TypeConvertor
-        @type_convertor_map = Type_Convertor::MAP.merge(Java::JavaSQL::Types::TIMESTAMP=>method(:timestamp_convert))
-        @basic_type_convertor_map = Type_Convertor::BASIC_MAP.dup
+        @type_convertor_map = TypeConvertor::MAP.merge(Java::JavaSQL::Types::TIMESTAMP=>method(:timestamp_convert))
+        @basic_type_convertor_map = TypeConvertor::BASIC_MAP.dup
       end
 
       # Yield a new statement object, and ensure that it is closed before returning.
@@ -703,27 +665,17 @@ module Sequel
           to_application_timestamp([v.getYear + 1900, v.getMonth + 1, v.getDate, v.getHours, v.getMinutes, v.getSeconds, v.getNanos])
         end
       end
-
-      # SEQUEL5: Remove
-      def timestamp_convertor
-        Sequel::Deprecation.deprecate("Sequel::JDBC::Database#timestamp_convertor", "Use method(:timestamp_convert) instead")
-        method(:timestamp_convert)
-      end
     end
     
     class Dataset < Sequel::Dataset
       include StoredProcedures
 
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
-      
       PreparedStatementMethods = prepared_statements_module(
         "sql = self; opts = Hash[opts]; opts[:arguments] = bind_arguments",
         Sequel::Dataset::UnnumberedArgumentMapper,
         %w"execute execute_dui") do
           private
 
-          # Same as execute, explicit due to intricacies of alias and super.
           def execute_insert(sql, opts=OPTS)
             sql = self
             opts = Hash[opts]
@@ -739,7 +691,6 @@ module Sequel
         %w"execute execute_dui") do
           private
 
-          # Same as execute, explicit due to intricacies of alias and super.
           def execute_insert(sql, opts=OPTS)
             sql = @opts[:sproc_name]
             opts = Hash[opts]
@@ -750,17 +701,6 @@ module Sequel
           end
       end
       
-      # Whether to convert some Java types to ruby types when retrieving rows.
-      def convert_types
-        Sequel::Deprecation.deprecate("Sequel::JDBC::Dataset#convert_types", "The private #convert_types? method returns whether to convert types for this dataset")
-        @opts[:convert_types]
-      end
-      def convert_types=(v)
-        Sequel::Deprecation.deprecate("Sequel::JDBC::Dataset#convert_types=", "Switch to using #with_convert_types, which returns a modified copy")
-        @opts[:convert_types] = v
-      end
-
-      # Correctly return rows from the database and return them as hashes.
       def fetch_rows(sql, &block)
         execute(sql){|result| process_result_set(result, &block)}
         self

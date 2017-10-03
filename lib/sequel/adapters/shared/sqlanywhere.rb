@@ -4,53 +4,17 @@ module Sequel
   module SqlAnywhere
     Sequel::Database.set_shared_adapter_scheme(:sqlanywhere, self)
 
-    # SEQUEL5: Remove
-    @convert_smallint_to_bool = true
-    class << self
-      def convert_smallint_to_bool
-        Sequel::Deprecation.deprecate("Sequel::SqlAnywhere.convert_smallint_to_bool", "Call this method on the Database instance")
-        @convert_smallint_to_bool
-      end
-      def convert_smallint_to_bool=(v)
-        Sequel::Deprecation.deprecate("Sequel::SqlAnywhere.convert_smallint_to_bool=", "Call this method on the Database instance")
-        @convert_smallint_to_bool = v
-      end
-    end
-
     module DatabaseMethods
       attr_reader :conversion_procs
 
-      # Override the default SqlAnywhere.convert_smallint_to_bool setting for this database.
-      attr_writer :convert_smallint_to_bool
+      # Set whether to convert smallint type to boolean for this Database instance
+      attr_accessor :convert_smallint_to_bool
 
-      AUTO_INCREMENT = 'IDENTITY'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :AUTO_INCREMENT)
-      SQL_BEGIN = "BEGIN TRANSACTION".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_BEGIN)
-      SQL_COMMIT = "COMMIT TRANSACTION".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_COMMIT)
-      SQL_ROLLBACK = "IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_ROLLBACK)
-      TEMPORARY = "GLOBAL TEMPORARY ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :TEMPORARY)
-      SMALLINT_RE = /smallint/i.freeze
-      Sequel::Deprecation.deprecate_constant(self, :SMALLINT_RE)
-      DECIMAL_TYPE_RE = /numeric/i
-      Sequel::Deprecation.deprecate_constant(self, :DECIMAL_TYPE_RE)
-
-      # Whether to convert smallint to boolean arguments for this dataset.
-      # Defaults to the SqlAnywhere module setting.
-      def convert_smallint_to_bool
-        defined?(@convert_smallint_to_bool) ? @convert_smallint_to_bool : (@convert_smallint_to_bool = ::Sequel::SqlAnywhere.instance_variable_get(:@convert_smallint_to_bool)) # true) # SEQUEL5
-      end
-
-      # Sysbase Server uses the :sqlanywhere type.
       def database_type
         :sqlanywhere
       end
 
       def freeze
-        convert_smallint_to_bool
         @conversion_procs.freeze
         super
       end
@@ -172,22 +136,18 @@ module Sequel
         false
       end
 
-      # SQL fragment for marking a table as temporary
       def temporary_table_sql
         "GLOBAL TEMPORARY "
       end
 
-      # SQL to BEGIN a transaction.
       def begin_transaction_sql
         "BEGIN TRANSACTION"
       end
 
-      # SQL to ROLLBACK a transaction.
       def rollback_transaction_sql
         "IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION"
       end
 
-      # SQL to COMMIT a transaction.
       def commit_transaction_sql
         "COMMIT TRANSACTION"
       end
@@ -214,7 +174,6 @@ module Sequel
         :image
       end
 
-      # Sybase specific syntax for altering tables.
       def alter_table_sql(table, op)
         case op[:op]
         when :add_column
@@ -278,57 +237,8 @@ module Sequel
     end
 
     module DatasetMethods
-      BOOL_TRUE = '1'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_TRUE)
-      BOOL_FALSE = '0'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BOOL_FALSE)
-      WILDCARD = LiteralString.new('%').freeze
-      Sequel::Deprecation.deprecate_constant(self, :WILDCARD)
-      TOP = " TOP ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :TOP)
-      START_AT = " START AT ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :START_AT)
-      SQL_WITH_RECURSIVE = "WITH RECURSIVE ".freeze
-      Sequel::Deprecation.deprecate_constant(self, :SQL_WITH_RECURSIVE)
-      DATE_FUNCTION = 'today()'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATE_FUNCTION)
-      NOW_FUNCTION = 'now()'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :NOW_FUNCTION)
-      DATEPART = 'datepart'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :DATEPART)
-      REGEXP = 'REGEXP'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :REGEXP)
-      NOT_REGEXP = 'NOT REGEXP'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :NOT_REGEXP)
-      APOS = "'".freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS)
-      APOS_RE = /'/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :APOS_RE)
-      DOUBLE_APOS = "''".freeze
-      Sequel::Deprecation.deprecate_constant(self, :DOUBLE_APOS)
-      BACKSLASH_RE = /\\/.freeze
-      Sequel::Deprecation.deprecate_constant(self, :BACKSLASH_RE)
-      QUAD_BACKSLASH = "\\\\\\\\".freeze
-      Sequel::Deprecation.deprecate_constant(self, :QUAD_BACKSLASH)
-      BLOB_START = "0x".freeze
-      Sequel::Deprecation.deprecate_constant(self, :BLOB_START)
-      HSTAR = "H*".freeze
-      Sequel::Deprecation.deprecate_constant(self, :HSTAR)
-      CROSS_APPLY = 'CROSS APPLY'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :CROSS_APPLY)
-      OUTER_APPLY = 'OUTER APPLY'.freeze
-      Sequel::Deprecation.deprecate_constant(self, :OUTER_APPLY)
-      ONLY_OFFSET = " TOP 2147483647".freeze
-      Sequel::Deprecation.deprecate_constant(self, :ONLY_OFFSET)
-
       Dataset.def_sql_method(self, :insert, %w'with insert into columns values')
       Dataset.def_sql_method(self, :select, %w'with select distinct limit columns into from join where group having compounds order lock')
-
-      # Override the default IBMDB.convert_smallint_to_bool setting for this dataset.
-      def convert_smallint_to_bool=(v)
-        Sequel::Deprecation.deprecate("Sequel::SqlAnywhere::Dataset#convert_smallint_to_bool=", "Call with_convert_smallint_to_bool instead, which returns a modified copy instead of modifying the object")
-        @opts[:convert_smallint_to_bool] = v
-      end
 
       # Whether to convert smallint to boolean arguments for this dataset.
       # Defaults to the IBMDB module setting.
@@ -380,7 +290,6 @@ module Sequel
         true
       end
 
-      # SQLAnywhere uses + for string concatenation, and LIKE is case insensitive by default.
       def complex_expression_sql_append(sql, op, args)
         case op
         when :'||'
@@ -437,7 +346,7 @@ module Sequel
         string.gsub(/[\\%_\[]/){|m| "\\#{m}"}
       end
 
-      # Use today() and Now() for CURRENT_DATE and CURRENT_TIMESTAMP
+      # Use today() for CURRENT_DATE and now() for CURRENT_TIMESTAMP and CURRENT_TIME
       def constant_sql_append(sql, constant)
         case constant
         when :CURRENT_DATE
@@ -492,8 +401,7 @@ module Sequel
         end
       end
 
-      # Sybase uses TOP N for limit.  For Sybase TOP (N) is used
-      # to allow the limit to be a bound variable.
+      # Sybase uses TOP N for limit.
       def select_limit_sql(sql)
         l = @opts[:limit]
         o = @opts[:offset]

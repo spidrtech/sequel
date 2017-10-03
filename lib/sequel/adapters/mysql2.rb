@@ -1,19 +1,17 @@
 # frozen-string-literal: true
 
 require 'mysql2'
-Sequel.require %w'utils/mysql_mysql2', 'adapters'
+require_relative 'utils/mysql_mysql2'
 
 module Sequel
-  # Module for holding all Mysql2-related classes and modules for Sequel.
   module Mysql2
     NativePreparedStatements = if ::Mysql2::VERSION >= '0.4'
       true
     else
-      Sequel.require %w'utils/mysql_prepared_statements', 'adapters'
+      require_relative 'utils/mysql_prepared_statements'
       false
     end
 
-    # Database class for MySQL databases used with Sequel.
     class Database < Sequel::Database
       include Sequel::MySQL::DatabaseMethods
       include Sequel::MySQL::MysqlMysql2::DatabaseMethods
@@ -66,12 +64,10 @@ module Sequel
         conn
       end
 
-      # Return the number of matched rows when executing a delete/update statement.
       def execute_dui(sql, opts=OPTS)
         execute(sql, opts){|c| return c.affected_rows}
       end
 
-      # Return the last inserted id when executing an insert statement.
       def execute_insert(sql, opts=OPTS)
         execute(sql, opts){|c| return c.last_id}
       end
@@ -171,7 +167,7 @@ module Sequel
 
       # Set the convert_tinyint_to_bool setting based on the default value.
       def adapter_initialize
-        self.convert_tinyint_to_bool = Sequel::MySQL.instance_variable_get(:@convert_tinyint_to_bool) # true # SEQUEL5
+        self.convert_tinyint_to_bool = true
       end
 
       if NativePreparedStatements
@@ -190,12 +186,10 @@ module Sequel
         end
       end
 
-      # MySQL connections use the query method to execute SQL without a result
       def connection_execute_method
         :query
       end
 
-      # The MySQL adapter main error class is Mysql2::Error
       def database_error_classes
         [::Mysql2::Error]
       end
@@ -219,28 +213,17 @@ module Sequel
              MYSQL_DATABASE_DISCONNECT_ERRORS.match(e.message)))
       end
 
-      # The database name when using the native adapter is always stored in
-      # the :database option.
-      def database_name
-        Sequel::Deprecation.deprecate("Database#database_name", "Instead, use .get(Sequel.function(:DATABASE))")
-        @opts[:database]
-      end
-
       # Convert tinyint(1) type to boolean if convert_tinyint_to_bool is true
       def schema_column_type(db_type)
         convert_tinyint_to_bool && db_type =~ /\Atinyint\(1\)/ ? :boolean : super
       end
     end
 
-    # Dataset class for MySQL datasets accessed via the native driver.
     class Dataset < Sequel::Dataset
       include Sequel::MySQL::DatasetMethods
       include Sequel::MySQL::MysqlMysql2::DatasetMethods
       include Sequel::MySQL::PreparedStatements::DatasetMethods unless NativePreparedStatements
       STREAMING_SUPPORTED = ::Mysql2::VERSION >= '0.3.12'
-
-      Database::DatasetClass = self
-      Sequel::Deprecation.deprecate_constant(Database, :DatasetClass)
 
       if NativePreparedStatements
         PreparedStatementMethods = prepared_statements_module(
@@ -249,7 +232,6 @@ module Sequel
           %w"execute execute_dui execute_insert")
       end
 
-      # Yield all rows matching this dataset.
       def fetch_rows(sql)
         execute(sql) do |r|
           self.columns = r.fields.map!{|c| output_identifier(c.to_s)}
@@ -258,7 +240,8 @@ module Sequel
         self
       end
 
-      # Use streaming to implement paging if Mysql2 supports it.
+      # Use streaming to implement paging if Mysql2 supports it and
+      # it hasn't been disabled.
       def paged_each(opts=OPTS, &block)
         if STREAMING_SUPPORTED && opts[:stream] != false
           stream.each(&block)
@@ -283,7 +266,6 @@ module Sequel
         @db.convert_tinyint_to_bool
       end
 
-      # Set the :type option to :select if it hasn't been set.
       def execute(sql, opts=OPTS)
         opts = Hash[opts]
         opts[:type] = :select

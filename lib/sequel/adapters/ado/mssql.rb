@@ -1,21 +1,14 @@
 # frozen-string-literal: true
 
-Sequel.require 'adapters/shared/mssql'
+require_relative '../shared/mssql'
 
 module Sequel
   module ADO
-    # Database and Dataset instance methods for MSSQL specific
-    # support via ADO.
     module MSSQL
       module DatabaseMethods
         include Sequel::MSSQL::DatabaseMethods
-        # Query to use to get the number of rows affected by an update or
-        # delete query.
-        ROWS_AFFECTED = "SELECT @@ROWCOUNT AS AffectedRows"
-        Sequel::Deprecation.deprecate_constant(self, :ROWS_AFFECTED)
-        
         # Issue a separate query to get the rows modified.  ADO appears to
-        # use pass by reference with an integer variable, which is obviously
+        # use pass by reference with an integer variable, which is
         # not supported directly in ruby, and I'm not aware of a workaround.
         def execute_dui(sql, opts=OPTS)
           return super unless @opts[:provider]

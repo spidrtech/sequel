@@ -38,17 +38,24 @@ module Sequel
     #             that argument is passed as an argument to the proc.
     #
     # The default validation options for all models can be modified by
-    # changing the values of the Sequel::Plugins::ValidationHelpers::DEFAULT_OPTIONS hash.  You
-    # change change the default options on a per model basis
-    # by overriding a private instance method default_validation_helpers_options.
-    #
+    # overridding the Model#default_validation_helpers_options private method.
     # By changing the default options, you can setup internationalization of the
     # error messages.  For example, you would modify the default options:
     #
-    #   Sequel::Plugins::ValidationHelpers::DEFAULT_OPTIONS.merge!(
-    #     :exact_length=>{:message=>lambda{|exact| I18n.t("errors.exact_length", :exact => exact)}},
-    #     :integer=>{:message=>lambda{I18n.t("errors.integer")}}
-    #   )
+    #   class Sequel::Model
+    #     private
+    #
+    #     def default_validation_helpers_options(type)
+    #       case type
+    #       when :exact_length
+    #         {message: lambda{|exact| I18n.t("errors.exact_length", exact: exact)}
+    #       when :integer
+    #         {message: lambda{I18n.t("errors.integer")}
+    #       else
+    #         super
+    #       end
+    #     end
+    #   end
     #
     # and then use something like this in your yaml translation file:
     #
@@ -61,20 +68,16 @@ module Sequel
     # you need to override the method.  Here's an example:
     #   
     #   class Sequel::Model::Errors
-    #     ATTRIBUTE_JOINER = I18n.t('errors.joiner').freeze
     #     def full_messages
     #       inject([]) do |m, kv|
     #         att, errors = *kv
     #         att.is_a?(Array) ? Array(att).map!{|v| I18n.t("attributes.#{v}")} : att = I18n.t("attributes.#{att}")
-    #         errors.each {|e| m << (e.is_a?(LiteralString) ? e : "#{Array(att).join(ATTRIBUTE_JOINER)} #{e}")}
+    #         errors.each {|e| m << (e.is_a?(LiteralString) ? e : "#{Array(att).join(I18n.t('errors.joiner'))} #{e}")}
     #         m
     #       end
     #     end
     #   end
     module ValidationHelpers
-      # Default validation options used by Sequel.  Can be modified to change the error
-      # messages for all models (e.g. for internationalization), or to set certain
-      # default options for validations (e.g. :allow_nil=>true for all validates_format).
       DEFAULT_OPTIONS = {
         :exact_length=>{:message=>lambda{|exact| "is not #{exact} characters"}},
         :format=>{:message=>lambda{|with| 'is invalid'}},
@@ -89,9 +92,8 @@ module Sequel
         :type=>{:message=>lambda{|klass| klass.is_a?(Array) ? "is not a valid #{klass.join(" or ").downcase}" : "is not a valid #{klass.to_s.downcase}"}},
         :presence=>{:message=>lambda{"is not present"}},
         :unique=>{:message=>lambda{'is already taken'}}
-      }
-      DEFAULT__OPTIONS = DEFAULT_OPTIONS
-      Sequel::Deprecation.deprecate_constant(self, :DEFAULT_OPTIONS)
+      }.freeze
+      DEFAULT_OPTIONS.each_value(&:freeze)
 
       module InstanceMethods 
         # Check that the attribute values are the given exact length.
@@ -106,7 +108,7 @@ module Sequel
     
         # Check attribute value(s) is included in the given set.
         def validates_includes(set, atts, opts=OPTS)
-          validatable_attributes_for_type(:includes, atts, opts){|a,v,m| validation_error_message(m, set) unless set.send(set.respond_to?(:cover?) ? :cover? : :include?, v)}
+          validatable_attributes_for_type(:includes, atts, opts){|a,v,m| validation_error_message(m, set) unless set.public_send(set.respond_to?(:cover?) ? :cover? : :include?, v)}
         end
     
         # Check attribute value(s) string representation is a valid integer.
@@ -123,7 +125,7 @@ module Sequel
 
         # Check that the attribute values length is in the specified range.
         def validates_length_range(range, atts, opts=OPTS)
-          validatable_attributes_for_type(:length_range, atts, opts){|a,v,m| validation_error_message(m, range) if v.nil? || !range.send(range.respond_to?(:cover?) ? :cover? : :include?, v.length)}
+          validatable_attributes_for_type(:length_range, atts, opts){|a,v,m| validation_error_message(m, range) if v.nil? || !range.cover?(v.length)}
         end
     
         # Check that the attribute values are not longer than the given max length.
@@ -165,7 +167,7 @@ module Sequel
         # Check attribute value(s) against a specified value and operation, e.g.
         # validates_operator(:>, 3, :value) validates that value > 3.
         def validates_operator(operator, rhs, atts, opts=OPTS)
-          validatable_attributes_for_type(:operator, atts, opts){|a,v,m| validation_error_message(m, operator, rhs) if v.nil? || !v.send(operator, rhs)}
+          validatable_attributes_for_type(:operator, atts, opts){|a,v,m| validation_error_message(m, operator, rhs) if v.nil? || !v.public_send(operator, rhs)}
         end
 
         # Validates for all of the model columns (or just the given columns)
@@ -223,7 +225,7 @@ module Sequel
         #             model's dataset.
         # :message :: The message to use (default: 'is already taken')
         # :only_if_modified :: Only check the uniqueness if the object is new or
-        #                      one of the columns has been modified.
+        #                      one of the columns has been modified, true by default.
         # :where :: A callable object where call takes three arguments, a dataset,
         #           the current object, and an array of columns, and should return
         #           a modified dataset that is filtered to include only rows with
@@ -232,9 +234,9 @@ module Sequel
         # If you want to do a case insensitive uniqueness validation on a database that
         # is case sensitive by default, you can use:
         #
-        #   validates_unique :column, :where=>(proc do |ds, obj, cols|
+        #   validates_unique :column, where:(lambda do |ds, obj, cols|
         #     ds.where(cols.map do |c|
-        #       v = obj.send(c)
+        #       v = obj.public_send(c)
         #       v = v.downcase if v
         #       [Sequel.function(:lower, c), v]
         #     end)
@@ -250,8 +252,7 @@ module Sequel
           atts.each do |a|
             arr = Array(a)
             next if arr.any?{|x| errors.on(x)}
-            # SEQUEL5: Default only_if_modified to true
-            next if opts[:only_if_modified] && !new? && !arr.any?{|x| changed_columns.include?(x)}
+            next if opts.fetch(:only_if_modified, true) && !new? && !arr.any?{|x| changed_columns.include?(x)}
             ds = opts[:dataset] || model.dataset
             ds = if where
               where.call(ds, self, arr)
@@ -276,7 +277,7 @@ module Sequel
         # The hash return must include a :message option that is either a
         # proc or string.
         def default_validation_helpers_options(type)
-          DEFAULT__OPTIONS[type]
+          DEFAULT_OPTIONS[type]
         end
 
         # Skip validating any attribute that matches one of the allow_* options.

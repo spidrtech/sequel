@@ -56,7 +56,7 @@ module Sequel
           # Initializes a new generator.
           def initialize(receiver ,&block)
             @receiver = receiver
-            instance_eval(&block)
+            instance_exec(&block)
           end
       
           # Delegates method calls to the receiver by calling receiver.validates_xxx.
@@ -97,15 +97,16 @@ module Sequel
         #
         #   class MyClass < Sequel::Model
         #     validates do
-        #       length_of :name, :minimum => 6
-        #       length_of :password, :minimum => 8
+        #       length_of :name, minimum: 6
+        #       length_of :password, minimum: 8
         #     end
         #   end
         #
         # is equivalent to:
+        #
         #   class MyClass < Sequel::Model
-        #     validates_length_of :name, :minimum => 6
-        #     validates_length_of :password, :minimum => 8
+        #     validates_length_of :name, minimum: 6
+        #     validates_length_of :password, minimum: 8
         #   end
         def validates(&block)
           Generator.new(self, &block)
@@ -187,7 +188,7 @@ module Sequel
         #                   Sequel will attempt to insert a NULL value into the database, instead of using the
         #                   database's default.
         # :allow_nil :: Whether to skip the validation if the value is nil.
-        # :if :: A symbol (indicating an instance_method) or proc (which is instance_evaled)
+        # :if :: A symbol (indicating an instance_method) or proc (which is instance_execed)
         #        skipping this validation if it returns nil or false.
         # :tag :: The tag to use for this validation.
         def validates_each(*atts, &block)
@@ -273,7 +274,7 @@ module Sequel
               o.errors.add(a, opts[:message] || opts[:wrong_length]) unless v && v.size == i
             end
             if w = opts[:within]
-              o.errors.add(a, opts[:message] || opts[:wrong_length]) unless v && w.send(w.respond_to?(:cover?) ? :cover? : :include?, v.size)
+              o.errors.add(a, opts[:message] || opts[:wrong_length]) unless v && w.public_send(w.respond_to?(:cover?) ? :cover? : :include?, v.size)
             end
           end
         end
@@ -335,7 +336,7 @@ module Sequel
           reflect_validation(:inclusion, opts, atts)
           atts << opts
           validates_each(*atts) do |o, a, v|
-            o.errors.add(a, opts[:message]) unless n.send(n.respond_to?(:cover?) ? :cover? : :include?, v)
+            o.errors.add(a, opts[:message]) unless n.public_send(n.respond_to?(:cover?) ? :cover? : :include?, v)
           end
         end
     
@@ -434,7 +435,7 @@ module Sequel
           when Symbol
             o.get_column_value(i)
           when Proc
-            o.instance_eval(&i)
+            o.instance_exec(&i)
           else
             raise(::Sequel::Error, "invalid value for :if validation option")
           end
