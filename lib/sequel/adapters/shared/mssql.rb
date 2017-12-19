@@ -165,6 +165,7 @@ module Sequel
         m = output_identifier_meth
         im = input_identifier_meth
         indexes = {}
+        table = table.value if table.is_a?(Sequel::SQL::Identifier)
         i = Sequel[:i]
         ds = metadata_dataset.from(Sequel.lit('[sys].[tables]').as(:t)).
          join(Sequel.lit('[sys].[indexes]').as(:i), :object_id=>:object_id).
@@ -473,12 +474,6 @@ module Sequel
         :datetime
       end
 
-      # MSSQL has both datetime and timestamp classes, most people are going
-      # to want datetime
-      def type_literal_generic_time(column)
-        column[:only_time] ? :time : :datetime
-      end
-      
       # MSSQL doesn't have a true boolean class, so it uses bit
       def type_literal_generic_trueclass(column)
         :bit

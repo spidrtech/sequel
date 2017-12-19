@@ -49,19 +49,15 @@
 #
 module Sequel
   module IndexCaching
-    def self.extended(mod)
-      mod.instance_variable_set(:@indexes, {})
+    # Set index cache to the empty hash.
+    def self.extended(db)
+      db.instance_variable_set(:@indexes, {})
     end
     
     # Remove the index cache for the given schema name
     def remove_cached_schema(table)
       k = quote_schema_table(table)
       Sequel.synchronize{@indexes.delete(k)}
-      super
-    end
-    
-    def freeze
-      @indexes.freeze
       super
     end
     
@@ -90,12 +86,10 @@ module Sequel
       load_index_cache(file) if File.exist?(file)
     end
 
-    # Returns indexes for the given table as a hash.
-    #
-    # If options are provided, the cache will be ignored and information will come
-    # from the database.
+    # If no options are provided and there is cached index information for
+    # the table, return the cached information instead of querying the
+    # database.
     def indexes(table, opts=OPTS)
-      opts = opts.dup
       return super unless opts.empty?
 
       quoted_name = literal(table)
@@ -104,7 +98,7 @@ module Sequel
       end
 
       result = super
-      Sequel.synchronize{@indexes[quoted_name] = result} if cache_schema
+      Sequel.synchronize{@indexes[quoted_name] = result}
       result
     end
   end

@@ -58,6 +58,7 @@ module Sequel
       def indexes(table, opts = OPTS)
         m = output_identifier_meth
         im = input_identifier_meth
+        table = table.value if table.is_a?(Sequel::SQL::Identifier)
         indexes = {}
         metadata_dataset.
          from(Sequel[:dbo][:sysobjects].as(:z)).
@@ -158,12 +159,6 @@ module Sequel
         :datetime
       end
 
-      # Sybase has both datetime and timestamp classes, most people are going
-      # to want datetime
-      def type_literal_generic_time(column)
-        column[:only_time] ? :time : :datetime
-      end
-      
       # Sybase doesn't have a true boolean class, so it uses integer
       def type_literal_generic_trueclass(column)
         :smallint
