@@ -1,6 +1,6 @@
 module Sequel
   module Plugins
-    module CircularAssociationSolver
+    module CyclicalAssociationSolver
 
       # Ensure associations are loaded
       def self.apply mod
@@ -13,8 +13,8 @@ module Sequel
 
       module ClassMethods
 
-        # Solves any remaining circular associations
-        def solve_circular_associations!
+        # Solves any remaining cyclical associations
+        def solve_cyclical_associations!
 
           # Keep trying to solve as long as the stack length is reduced each time
           length = nil
@@ -23,7 +23,7 @@ module Sequel
             length = @_resolver_stack.count
             stack = @_resolver_stack
 
-            # Attempt to solve remaining circular associations
+            # Attempt to solve remaining cyclical associations
             @_resolver_stack = []
             stack.each do |klass, assoc_type, name, opts, block|
               klass.send(assoc_type, name, **opts, &block)

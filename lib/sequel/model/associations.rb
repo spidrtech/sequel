@@ -1709,6 +1709,10 @@ module Sequel
         #            between the given object and the current object (*_to_one associations).
         # :subqueries_per_union :: The number of subqueries to use in each UNION query, for eager
         #                          loading limited associations using the default :union strategy.
+        # :through :: The symbol name of a previously defined association to use as the foundation for the
+        #             new association. This will recursviely traverse intermediary associations to connstruct
+        #             a many_through_many or one_through_many association to the target. Cyclical association paths
+        #             can be handled through use of the :cyclical_association_solver plugin.
         # :validate :: Set to false to not validate when implicitly saving any associated object.
         # === :many_to_one
         # :key :: foreign key in current model's table that references
