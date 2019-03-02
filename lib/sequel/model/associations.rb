@@ -31,6 +31,9 @@ module Sequel
         end
       end
 
+      class MissingAssociation < Error; end
+      class NoAssociationPath < Error; end
+
       # The dataset module to use for classes using the associations plugin.
       class DatasetModule < Model::DatasetModule
         def_dataset_caching_method(self, :eager)
@@ -1927,13 +1930,13 @@ module Sequel
                 path.push("#{model}.#{through}")
               end
 
-              raise(Sequel::MissingAssociation, "#{m} is missing through association :#{t} from #{path.join " -> "}")
+              raise(MissingAssociation, "#{m} is missing through association :#{t} from #{path.join " -> "}")
 
             else
 
               if opts[:assocs].last[:name].to_s.singularize != (opts[:using] || opts[:name]).to_s.singularize
                 text = "#{opts[:models].first}.#{opts[:name]} could not be resolved through path #{opts[:models].zip(opts[:through]).map{|model, through| "#{model}.#{through}"}.join " -> "}"
-                raise(Sequel::MissingAssociation, text)
+                raise(MissingAssociation, text)
               end
 
               return opts
@@ -1948,7 +1951,7 @@ module Sequel
           # Handle *_through_many associations
           if assoc[:type].to_s.ends_with?("_through_many")
 
-            opts[:through].push assoc[:originally_through]
+            opts[:through].push(assoc[:originally_through])
             opts[:from_through] = true
 
             # Search through the existing model first, falling back to the associated model
@@ -1958,9 +1961,9 @@ module Sequel
             ]
             return begin
               model = search.shift
-              raise(Sequel::NoAssociationPath, opts) unless model
+              raise(NoAssociationPath, opts) unless model
               self.find_association_path(**opts, models: opts[:models] + [model])
-            rescue Sequel::MissingAssociation
+            rescue MissingAssociation
               # Try the next model in the search path
               # puts "#{"\t" * $tabs}retrying..."
               retry
@@ -1969,11 +1972,11 @@ module Sequel
           end
 
           # Move to the new model
-          opts[:models].push assoc[:class] || assoc[:class_name].constantize
+          opts[:models].push(assoc[:class] || assoc[:class_name].constantize)
 
           # Read the through association if present
           if assoc[:through]
-            opts[:through].push assoc[:using] || assoc[:through]
+            opts[:through].push(assoc[:using] || assoc[:through])
             opts[:from_through] = true
             opts[:using] = nil
             return self.find_association_path(**opts)
@@ -1981,17 +1984,17 @@ module Sequel
 
           # Otherwise, add the new table to the stack
           if opts[:from_through] && opts[:models].last.respond_to?(:cti_tables)
-            opts[:tables].push opts[:models].last.cti_tables.first
+            opts[:tables].push(opts[:models].last.cti_tables.first)
           else
-            opts[:tables].push opts[:models].last.table_name
+            opts[:tables].push(opts[:models].last.table_name)
           end
 
           # Left side
           case assoc[:type]
             when :one_to_many, :one_to_one # 1:_
-              opts[:keys].push assoc.primary_key
+              opts[:keys].push(assoc.primary_key)
             when :many_to_one # n:_
-              opts[:keys].push assoc[:key]
+              opts[:keys].push(assoc[:key])
             else
               raise
           end
@@ -1999,15 +2002,15 @@ module Sequel
           # Right side
           case assoc[:type]
             when :many_to_one, :one_to_one # _:1
-              opts[:keys].push assoc.primary_key
+              opts[:keys].push(assoc.primary_key)
             when :one_to_many # _:n
-              opts[:keys].push assoc[:key]
+              opts[:keys].push(assoc[:key])
             else
               raise
           end
 
           # Check for a source association
-          opts[:through].push opts[:using] || opts[:name]
+          opts[:through].push(opts[:using] || opts[:name])
           opts[:from_through] = false
           return self.find_association_path(**opts)
 
