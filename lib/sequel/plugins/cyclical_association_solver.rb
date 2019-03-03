@@ -2,9 +2,9 @@ module Sequel
   module Plugins
     module CyclicalAssociationSolver
 
-      # Ensure associations are loaded
+      # Ensure through associations are loaded
       def self.apply mod
-        mod.plugin(::Sequel::Model::Associations)
+        mod.plugin(:through_associations)
         mod.instance_eval do
           @_resolving = false
           @_resolver_stack = []
