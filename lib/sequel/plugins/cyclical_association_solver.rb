@@ -43,7 +43,10 @@ module Sequel
         def associate_through(type, name, opts, &block)
           begin
             result = super
-          rescue Sequel::Model::Associations::MissingAssociation, Sequel::Model::Associations::NoAssociationPath => e
+          rescue \
+            Sequel::Plugins::ThroughAssociations::MissingAssociation, \
+            Sequel::Plugins::ThroughAssociations::NoAssociationPath \
+          => e
 
             # Re-raise if we were resolving
             raise e if @_resolving

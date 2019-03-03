@@ -16,7 +16,7 @@ module Sequel
 
       # Ensure associations are loaded
       def self.apply mod
-        mod.plugin(:associations)
+        mod.plugin(:many_through_many)
       end
 
       module InstanceMethods
