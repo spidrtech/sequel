@@ -95,9 +95,6 @@ module Sequel
           # Short circuit if association does not exist
           unless assoc
 
-            #puts "#{"\t" * $tabs}" + opts[:models].inspect.red
-            #puts "#{"\t" * $tabs}" + opts[:models].last.associations.inspect.yellow
-
             # Determine if finished or if the last relation is missing
             if opts[:from_through]
 
@@ -144,7 +141,6 @@ module Sequel
               self.find_association_path(**opts, models: opts[:models] + [model])
             rescue MissingAssociation
               # Try the next model in the search path
-              # puts "#{"\t" * $tabs}retrying..."
               retry
             end
 
@@ -194,7 +190,6 @@ module Sequel
           return self.find_association_path(**opts)
 
         end
-
 
       end
 
